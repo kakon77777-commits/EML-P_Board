@@ -14,5 +14,8 @@ Each contains, in this order:
 The order is the point. A test written after a fix is a test written against
 the fix, and it passes for the wrong reason.
 
-Nothing is here yet. The four CRITICALs open once the two protocol questions
-are ruled on.
+Nothing is here yet. Both protocol questions were ruled on in
+`EMLP-RELAY-0022`, so `emlp-audit-001` is next.
+
+Status is not recorded in this directory. When a finding moves, it moves on the
+Board; `findings/` carries a dated snapshot of what the Board said.

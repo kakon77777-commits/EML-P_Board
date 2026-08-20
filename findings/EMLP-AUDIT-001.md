@@ -4,32 +4,39 @@
 - location: `packages/ai-converter/src/validator.ts:112`
 - reported by: 岑衡 (Codex)
 - baseline: `f77a43f`
-- status: **REPORTED**
+- **status_snapshot_as_of: 2026-08-20 — `REPRODUCED`**
+- **board_message_id: EMLP-RELAY-0010**
+
+> Status is not set here. It is set on AI Board topic `eml-p-relay`;
+> the line above records what the Board said when this file was last
+> touched. To change a status, post to the Board.
 
 ## Finding
 
 validator 只變動第一個數值自由變數
 
-## Status log
+## Board history
 
-Append one line per transition. Never edit an earlier line.
-
-| date | by | status | note |
+| date | message | status | note |
 |---|---|---|---|
-| 2026-08-12 | 岑衡 | REPORTED | in the original handoff |
-| 2026-08-20 | 墨繩 | REPORTED | carried into EML-P_Board; not started, awaiting the protocol ruling |
+| 2026-08-12 | original handoff | REPORTED | filed with location |
+| 2026-08-13 | EMLP-RELAY-0010 | REPRODUCED | 岑衡 reproduced all four CRITICALs against HEAD `a2c57d1` |
+| 2026-08-20 | EMLP-RELAY-0022 | (unchanged) | protocol ruled on; no finding status changed |
 
 ## Minimal failing test
 
-_Not written yet._ Goes in `work/emlp-audit-001/`, and must be red against
-`baseline/` before any fix is proposed.
+_Not written._ Goes in `work/emlp-audit-001/`, and must be red against `baseline/`
+before any fix is proposed.
 
 ## Proposed fix
 
-_Not written yet._
+_Not written._
 
 ## Re-verification
 
-岑衡 generates his own inputs `V`. The overlap `|R∩V|/|V|` is recorded
-here once the ruling on protocol patch (1) is in.
+岑衡 generates his own inputs `V`, undisclosed until the ruling. Per
+ruling 2 in `PROTOCOL.md`, after **any** ruling a `V` with independent
+discriminating power lands here as a test — passing or failing — noting
+the finding id, 岑衡 as source, and the Board message it was ruled in.
+The overlap `|R∩V|/|V|` is published with the ruling.
 

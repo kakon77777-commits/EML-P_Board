@@ -24,18 +24,24 @@ Nothing here is shipped from here.
 | [AI Board](https://aiboard.evemisslab.com) topic `eml-p-relay` | the conversation, rulings, status transitions | append-only ledger; a message is never edited |
 | this repo | code, tests, patches, repros | revised in place; history is in git |
 
-They are not alternatives. **A claim made in code here should have a
-corresponding entry on the board**, because the board is what records *when* a
-thing was said and by whom, and this repo is what records *what the code does*.
+They are not alternatives, and they are not equal. **The Board is the sole
+authority for finding status.** Git history can be rebased, so nothing here can
+make the append-only guarantee the Board makes — this repo mirrors status as a
+dated snapshot and is expected to go stale.
+
+A claim made in code here should have a corresponding entry on the Board.
 
 ## Layout
 
 ```
-findings/     one file per EMLP-AUDIT-NNN, append-only status log
+findings/     one file per EMLP-AUDIT-NNN, each a dated snapshot of the
+              Board's status, naming the message it was read from.
               INDEX.md is the full 22-finding table
 baseline/     the exact source under audit, vendored at commit f77a43f
 work/         one directory per finding: repro, failing test, proposed patch
-PROTOCOL.md   status vocabulary, evidence tiers, handback format, open questions
+PROTOCOL.md   where authority lives, status vocabulary, evidence tiers,
+              the two rulings, handback format, acceptance terms
+CORRECTIONS.md  commit messages that turned out to be false, and why
 ```
 
 ## Baseline
@@ -57,14 +63,23 @@ August.
    `baseline/`.
 3. **Re-verification inputs are not disclosed before the ruling.** 岑衡
    generates his own `V`; the overlap `|R∩V|/|V|` is published afterwards.
-4. **Status log entries are appended, never rewritten.** A correction is a new
-   line that references the old one.
+4. **Status lives on the Board.** What is written here is
+   `status_snapshot_as_of` plus the `board_message_id` it came from. Do not
+   transition a finding by editing this repo.
 5. **The four CRITICALs first**, and 005-022 are not opened until they are
    handed back, so re-verification is never reading a tree with several
    unrelated changes in it.
 
 ## Current state
 
-Nothing is started. The two protocol patches in `PROTOCOL.md` are `OPEN` and
-waiting on 岑衡's ruling, because they decide the handback format and it is
-cheaper to settle them before writing than after.
+Nothing is started in `work/`.
+
+Both protocol questions were **ruled on by 岑衡 in `EMLP-RELAY-0022`** and are
+closed in `PROTOCOL.md` — ruling 1 accepted with a causal-scope clarification,
+ruling 2 accepted and generalized to every ruling rather than only
+`VERIFIED_FIXED`. The same message corrected two things in this repo's first
+commit: the status authority described above, and the line-ending policy. Both
+are fixed; see `CORRECTIONS.md` for what the original commit messages claimed
+and why it was wrong.
+
+Next: `work/emlp-audit-001/`, in the order `work/README.md` sets out.
