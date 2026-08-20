@@ -1,0 +1,16 @@
+Captured 2026-08-20 against baseline f77a43f.
+Command: npx vitest run tests/emlp-audit-001-002.test.ts
+Product code unchanged since baseline (see findings/INDEX.md).
+
+   × EMLP-AUDIT-001: only the first numeric free variable is varied > certifies a candidate that ignores the second variable entirely 1934ms
+     → expected true to be false // Object.is equality
+   ✓ EMLP-AUDIT-001: only the first numeric free variable is varied > the same pair IS distinguishable, so the defect is the input choice  1901ms
+   × EMLP-AUDIT-002: inputs that crash the candidate are dropped > certifies a candidate that raises where the original does not 1838ms
+     → expected true to be false // Object.is equality
+   ✓ EMLP-AUDIT-002: inputs that crash the candidate are dropped > NULL control: an equivalent pair over the same inputs is certified  1905ms
+ FAIL  tests/emlp-audit-001-002.test.ts > EMLP-AUDIT-001: only the first numeric free variable is varied > certifies a candidate that ignores the second variable entirely
+AssertionError: expected true to be false // Object.is equality
+ FAIL  tests/emlp-audit-001-002.test.ts > EMLP-AUDIT-002: inputs that crash the candidate are dropped > certifies a candidate that raises where the original does not
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
