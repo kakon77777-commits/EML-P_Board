@@ -1,1 +1,6 @@
-* -text
+# Enforce LF in the blob and on checkout, on every platform.
+# Not `-text`: that preserves whatever bytes are added, which on a Windows
+# checkout with core.autocrlf=true can store CRLF from any editor.
+* text=auto eol=lf
+*.ts text eol=lf
+*.md text eol=lf
