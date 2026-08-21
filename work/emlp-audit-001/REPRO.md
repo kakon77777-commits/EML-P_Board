@@ -130,7 +130,22 @@ read as "the validator rejects everything": one shows the same program pair is
 distinguishable under a different binding order, the other shows a genuinely
 equivalent pair is still accepted.
 
-## Not proposed yet
+## Scope, ruled 2026-08-20
 
-No patch. Per `PROTOCOL.md` the fix comes after this, and 岑衡's acceptance
-inputs `V` stay undisclosed until his ruling.
+`EMLP-RELAY-0025` §3 folded the binding-order witness **into 001**, not into a
+new finding: same dataflow, same root cause, and splitting it would let one half
+be closed alone. The finding's description is therefore:
+
+> validator 只變動由 LLM binding 行序選出的第一個 numeric free variable，使未被
+> 選中的變數可被候選程式忽略，且 verdict 對同一 binding map 的序列化順序不穩定。
+
+002 stays a separate root cause (§5): 001 is input-generation coverage and
+external order control, 002 is outcome filtering.
+
+## Patch
+
+`patch.diff` — 73 insertions, 8 deletions in `validator.ts`. Drills and their
+red output in `DRILL.md`; the measured order-dependence table and what the fix
+is *not* claiming in `NOTES.md`.
+
+Status is not transitioned here. `V` stays undisclosed until 岑衡's ruling.

@@ -61,3 +61,68 @@ describe('EMLP-AUDIT-002: inputs that crash the candidate are dropped', () => {
     expect(r.equivalent).toBe(true);
   });
 });
+
+/**
+ * Acceptance surface for the 001 patch, set by 岑衡 in EMLP-RELAY-0025 §4.
+ * These are GREEN after the fix; the drill that makes 001 red again lives in
+ * work/emlp-audit-001/DRILL.md.
+ */
+describe('EMLP-AUDIT-001 acceptance', () => {
+  it('§4.2 verdict is invariant under permutation of the binding lines', () => {
+    const original = 'result = a + b';
+    const compiled = 'result = a + 3';
+    const one = validateEquivalence(original, compiled, 'result', ['a = 1\nb = 3']);
+    const two = validateEquivalence(original, compiled, 'result', ['b = 3\na = 1']);
+    expect(one.equivalent).toBe(two.equivalent);
+    // §4.3: and both must be false.
+    expect(one.equivalent).toBe(false);
+  });
+
+  it('§4.1 a candidate ignoring the THIRD of three variables is caught', () => {
+    // The old rule varied a only. Nothing about "first" saves c.
+    const original = 'result = a + b + c';
+    const compiled = 'result = a + b + 3';
+    expect(validateEquivalence(original, compiled, 'result', ['a = 1\nb = 1\nc = 3']).equivalent).toBe(false);
+  });
+
+  it('the coverage rule is reported, so the bound is visible in the result', () => {
+    const r = validateEquivalence('result = a + b', 'result = b + a', 'result', ['a = 1\nb = 2']);
+    expect(r.equivalent).toBe(true);
+    expect(r.detail).toMatch(/one-at-a-time over 2 numeric variable\(s\)/);
+  });
+});
+
+/**
+ * Acceptance surface for 002. Separate root cause, separate obligations
+ * (EMLP-RELAY-0025 §5): the divergence must be proved directly and the errored
+ * inputs must be visible rather than dropped.
+ */
+describe('EMLP-AUDIT-002 acceptance', () => {
+  it('names the failing side in the detail', () => {
+    const r = validateEquivalence(
+      'result = a * 2',
+      "if a == 7:\n    raise ValueError('boom')\nresult = a * 2",
+      'result',
+      ['a = 1'],
+    );
+    expect(r.equivalent).toBe(false);
+    expect(r.detail).toMatch(/compiled failed where the other succeeded/);
+  });
+
+  it('catches the reverse: the candidate swallows an error the original raises', () => {
+    const r = validateEquivalence(
+      "if a == 7:\n    raise ValueError('boom')\nresult = a * 2",
+      'result = a * 2',
+      'result',
+      ['a = 1'],
+    );
+    expect(r.equivalent).toBe(false);
+    expect(r.detail).toMatch(/original failed where the other succeeded/);
+  });
+
+  it('an input unusable on BOTH sides is counted, not hidden', () => {
+    const r = validateEquivalence('result = 1/0', 'result = 1/0', 'result', ['a = 1']);
+    expect(r.inconclusive).toBe(true);
+    expect(r.detail).toMatch(/failed on BOTH sides/);
+  });
+});
