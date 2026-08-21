@@ -96,3 +96,75 @@ NULL controls in the test file, which are:
   turned into a false divergence.
 
 All three are green after the patch and are not touched by any drill above.
+
+
+---
+
+# Round 2 drills — after 岑衡's EMLP-RELAY-0028 escape
+
+## The drill that did not fire, and what it cost to notice
+
+Restoring the `allNumeric` gate — **the exact hole she found** — and re-running
+her verification file gave **13 passed, 0 failed**.
+
+Her mixed-binding test went green under the mutation. Not because coverage was
+restored, but because with the gate back the mixed case falls through to the
+**fail-closed** branch, which also returns `equivalent: false`. Her assertion is
+`toMatchObject({ equivalent: false })`, and both routes satisfy it.
+
+So that test cannot distinguish:
+
+| fix | her mixed test | what it does to legitimate mixed input |
+|---|---|---|
+| (a) extend numeric coverage across mixed bindings | green | still certifies correctly |
+| (b) refuse to certify anything with a non-numeric variable | green | refuses every mixed pair |
+
+Those are very different products. A handback claiming "the drill fires" would
+have been claiming something the drill cannot see.
+
+## The control that separates them
+
+A **genuinely equivalent** mixed pair must still come back `equivalent: true`.
+Fix (a) certifies it; fix (b) cannot. Three tests added:
+
+- still CERTIFIES an equivalent mixed numeric/string pair
+- the `detail` reports the numeric coverage *and* the held non-numerics
+- fails closed only when **every** free variable is non-numeric
+
+## Drill A — restore the `allNumeric` gate
+
+Mutation: `if (numericVars.length > 0)` → `if (numericVars.length > 0 && otherVars.length === 0)`
+
+```
+× still CERTIFIES a genuinely equivalent mixed numeric/string pair
+× reports that the numeric variables were covered despite the string one
+  Tests  2 failed | 14 passed (16)
+```
+
+**Mechanism count: 2 of 2 coverage tests fired. The fail-closed test did not,
+and should not — that mechanism is untouched.**
+
+## Drill B — remove the fail-closed branch
+
+Mutation: `generatedNothing = true` → `false`, i.e. certify on LLM-supplied
+inputs when nothing could be generated.
+
+```
+× fails closed when EVERY free variable is non-numeric
+  Tests  1 failed | 12 passed (13)
+```
+
+**Mechanism count: 1 of 1. Neither coverage test fired.** The two mechanisms
+are independently aimed.
+
+## One ordering defect found by the fail-closed test
+
+The first version put the `generatedNothing` check just before the final
+`equivalent: true`. The **discrimination** check returns before that, so an
+all-string case came back with `could not confirm - test inputs do not exercise
+the computation` — which blames the inputs, when the real reason is that the
+validator could not generate any.
+
+Moved ahead of the discrimination check and behind the agreement loop, so a
+real disagreement is still conclusive `false` and everything else fails closed
+with the accurate reason.

@@ -126,3 +126,40 @@ describe('EMLP-AUDIT-002 acceptance', () => {
     expect(r.detail).toMatch(/failed on BOTH sides/);
   });
 });
+
+/**
+ * Added after 岑衡's EMLP-RELAY-0028 escape, because her test alone cannot
+ * distinguish the two fixes that make it green:
+ *   (a) extend numeric coverage across mixed bindings  <- what was intended
+ *   (b) refuse to certify anything with a non-numeric variable
+ * Both return equivalent:false for her non-equivalent pair. Only (a) still
+ * certifies an equivalent one.
+ */
+describe('EMLP-AUDIT-001 mixed bindings: coverage, not refusal', () => {
+  it('still CERTIFIES a genuinely equivalent mixed numeric/string pair', () => {
+    const r = validateEquivalence(
+      'result = a * 100 + b * 10 + len(tag)',
+      'result = b * 10 + a * 100 + len(tag)',
+      'result',
+      ["a = 1\nb = 3\ntag = 'x'"],
+    );
+    expect(r, JSON.stringify(r)).toMatchObject({ equivalent: true });
+  });
+
+  it('reports that the numeric variables were covered despite the string one', () => {
+    const r = validateEquivalence(
+      'result = a + b + len(tag)',
+      'result = b + a + len(tag)',
+      'result',
+      ["a = 1\nb = 2\ntag = 'zz'"],
+    );
+    expect(r.detail).toMatch(/one-at-a-time over 2 numeric variable\(s\)/);
+    expect(r.detail).toMatch(/1 non-numeric held at the supplied value/);
+  });
+
+  it('fails closed when EVERY free variable is non-numeric', () => {
+    const r = validateEquivalence("result = tag + 'x'", "result = tag + 'x'", 'result', ["tag = 'a'"]);
+    expect(r.inconclusive).toBe(true);
+    expect(r.detail).toMatch(/every free variable is non-numeric/);
+  });
+});
