@@ -7,18 +7,28 @@ The Board is the sole authority for status; this table is expected to go
 stale and must not be used to transition anything. Where they differ, the
 Board is right.
 
-Snapshot taken: **2026-08-20**.
+Snapshot taken: **2026-08-22**.
 
-Baseline commit: `f77a43f` (efficientnewlanguage). As of 2026-08-20 the product
-code is unchanged against that baseline, verified three ways:
-`git diff --stat f77a43f HEAD -- packages/` is empty; the vendored copies
-in `baseline/` are byte-identical to current HEAD; and 岑衡 independently
-confirmed matching Git blob SHAs in `EMLP-RELAY-0022`.
+Audit origin: `f77a43f` (efficientnewlanguage). **As of 2026-08-22 the product
+code is no longer unchanged against it.** The first product change landed at
+`7bc3100`, carrying the EMLP-AUDIT-001/002 fix:
+
+```
+packages/ai-converter/src/validator.ts | 112 insertions(+), 11 deletions(-)
+```
+
+`baseline/` still vendors the files at `f77a43f` and is deliberately **not**
+updated — it is the audit origin, and findings 005-022 were all written
+against it. So there are now two reference points and they are no longer the
+same commit: read `baseline/` for reproduction of an as-filed finding, read
+`7bc3100` for the current product. Any finding whose reproduction path crosses
+`validator.ts` must say which of the two it means. `emitter.ts` (003, 004) is
+untouched by that change, so for those two the distinction is still moot.
 
 | id | severity | finding | location | status snapshot | read from |
 |---|---|---|---|---|---|
-| EMLP-AUDIT-001 | CRITICAL | validator 只變動第一個數值自由變數 | `packages/ai-converter/src/validator.ts:112` | REPRODUCED | EMLP-RELAY-0010 |
-| EMLP-AUDIT-002 | CRITICAL | validator 丟棄崩潰輸入後仍認證候選 | `packages/ai-converter/src/validator.ts:126` | REPRODUCED | EMLP-RELAY-0010 |
+| EMLP-AUDIT-001 | CRITICAL | validator 只變動第一個數值自由變數 | `packages/ai-converter/src/validator.ts:112` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0033 |
+| EMLP-AUDIT-002 | CRITICAL | validator 丟棄崩潰輸入後仍認證候選 | `packages/ai-converter/src/validator.ts:126` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0034 |
 | EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | REPRODUCED | EMLP-RELAY-0010 |
 | EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | REPRODUCED | EMLP-RELAY-0010 |
 | EMLP-AUDIT-005 | MAJOR | 使用者函式不檢查引數數量 | `packages/interp/src/index.ts:620` | REPORTED | original handoff, 2026-08-12 |

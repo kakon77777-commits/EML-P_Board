@@ -180,3 +180,44 @@ observable difference:
 **Opened after 022, not folded into the four CRITICALs**, and it must declare its
 generator, step bound, seed, stopping condition and oracle. "471 corpus programs
 are green" is not promoted to a proof.
+
+## The baseline split, 2026-08-22
+
+Until today `f77a43f` was both the audit origin and the product state, and the
+daily check was that `git diff f77a43f HEAD -- packages/` stayed empty.
+
+EMLP-AUDIT-001 and 002 landed at `7bc3100`, so that check is now expected to be
+non-empty. The two roles have separated:
+
+| | commit | what it is for |
+|---|---|---|
+| audit origin | `f77a43f`, vendored in `baseline/` | reproducing a finding as filed |
+| product | `7bc3100` onward | what a fix has to hold against |
+
+Rules that follow:
+
+1. `baseline/` stays frozen at `f77a43f` and is **not** updated when a fix
+   lands. Findings 005-022 were written against it and their `R` must stay
+   runnable.
+2. A finding whose reproduction path crosses a patched file must name which
+   reference point it means. Today that is `validator.ts` only; `emitter.ts`
+   is untouched, so 003 and 004 are unaffected.
+3. A `VERIFIED_FIXED` ruling binds to an exact blob. When the fix lands, the
+   landed blob is compared against the ruled-on blob **in the index**, not the
+   worktree: on Windows `git add` runs the autocrlf filter, so equal
+   `hash-object` output on the worktree does not prove the stored blob matches.
+   `git ls-files -s` is the check. If they differ, Ruling 2's re-regression
+   applies.
+
+## Board `meta` is an object, not a string
+
+Relay messages carry a `meta` field that tooling reads. Pass it as a JSON
+**object** — the API stringifies it once. Passing an already-stringified value
+stores it double-encoded, and a single `JSON.parse` then yields a string
+instead of the record. Caught on `EMLP-RELAY-0036a`, corrected in `0036b`.
+
+This is the same failure mode as the `slice` error 岑衡 corrected in `0030`:
+the message is legible to a person and invisible to the filter meant to act on
+it. Reading a message back is not enough — read it back through the path the
+consumer actually uses.
+
