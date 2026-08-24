@@ -1,0 +1,124 @@
+diff --git a/packages/transpiler-python/src/emitter.ts b/packages/transpiler-python/src/emitter.ts
+index 8c6a0c8..f391c9e 100644
+--- a/packages/transpiler-python/src/emitter.ts
++++ b/packages/transpiler-python/src/emitter.ts
+@@ -83,14 +83,24 @@ export function emitExpression(expr: Expression): string {
+       return `${child(expr.base, 8, true)}**${child(expr.exponent, 8)}`;
+     case 'Binary': {
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      // `-`, `/`, and `%` are non-associative: an equal-precedence right
+-      // operand must be parenthesized to preserve grouping (a - (b - c) !=
+-      // a - b - c; a % (b % c) != a % b % c).
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // NO binary operator here is safe to re-associate. `-`, `/` and `%` are
++      // non-associative outright (a - (b - c) != a - b - c). `+` and `*` are
++      // non-associative in IEEE floating point, which EML numbers are:
++      //   1.0 + (1e16 + -1e16) == 1.0      but   (1.0 + 1e16) + -1e16 == 0.0
++      //   0.1 * (3.0 * 7.0)   == 2.1       but   (0.1 * 3.0) * 7.0     == 2.1000000000000005
++      // So an equal-precedence RIGHT operand is always parenthesized. The left
++      // operand still is not: `a + b + c` is already left-associated and needs
++      // no parentheses to keep its grouping.
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // Python CHAINS bare comparisons: `a == b == c` means
++      // `(a == b) and (b == c)`, not `(a == b) == c`. EML has no chaining (it
++      // rejects `a < b < c` at parse time), so a Comparison operand that is
++      // itself a Comparison must keep its parentheses on BOTH sides or the
++      // grouping in the AST is silently replaced by a different operation.
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       const prec = expr.op === 'or' ? 2 : 3;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec)}`;
+@@ -110,7 +120,13 @@ export function emitExpression(expr: Expression): string {
+     case 'Sum':
+       return `sum(${emitExpression(expr.expr)} for ${aliasIdentifier(expr.iterator.name)} in ${emitExpression(expr.range)})`;
+     case 'Membership':
+-      return `${emitExpression(expr.element)} in ${emitExpression(expr.collection)}`;
++      // `in` sits at comparison precedence and chains with comparisons, so
++      // both operands need the same treatment as `Comparison` above. This
++      // previously called `emitExpression` directly, so it applied no
++      // precedence rule of any kind:
++      //   (a == b) in c   ->  a == b in c     (a chain, not a membership test)
++      //   x in (p or q)   ->  x in p or q     ((x in p) or q — returns q)
++      return `${child(expr.element, 5, true)} in ${child(expr.collection, 5, true)}`;
+     case 'Call': {
+       // An Identifier callee is NOT aliased: preserve genuine builtin calls
+       // like `list(1)`. An Attribute callee (`math.sqrt(x)`) re-emits through
+@@ -161,9 +177,24 @@ export function emitExpression(expr: Expression): string {
+   }
+ }
+ 
++/**
++ * Depth of enclosing class bodies, reset inside a nested `def`.
++ *
++ * An assignment in a class body creates a class ATTRIBUTE, and attributes are
++ * read as `c.list` - an Attribute access, which is not aliased. Aliasing the
++ * binder would write `lst = 5` for something every reader spells `.list`, so
++ * the two would not resolve to the same thing. A binder and its legal
++ * references must agree; that is not the same rule as "alias every name".
++ *
++ * A `def` inside a class body opens an ordinary local scope again, so the
++ * counter is saved and zeroed there.
++ */
++let classBodyDepth = 0;
++
+ /** Emit an assignment target (Phase 7b: `AssignTarget` is Identifier | Subscript). */
+ function emitTarget(target: AssignTarget): string {
+-  if (target.type === 'Identifier') return aliasIdentifier(target.name);
++  if (target.type === 'Identifier')
++    return classBodyDepth > 0 ? target.name : aliasIdentifier(target.name);
+   return emitExpression(target);
+ }
+ 
+@@ -211,7 +242,7 @@ export function emitStatement(stmt: Statement): string {
+       for (const h of stmt.handlers) {
+         const header = h.exceptionType
+           ? h.name
+-            ? `except ${h.exceptionType} as ${h.name}:`
++            ? `except ${h.exceptionType} as ${aliasIdentifier(h.name)}:`
+             : `except ${h.exceptionType}:`
+           : 'except:';
+         lines.push(header);
+@@ -227,7 +258,7 @@ export function emitStatement(stmt: Statement): string {
+       return stmt.exception ? `raise ${emitExpression(stmt.exception)}` : 'raise';
+     case 'With': {
+       const header = stmt.target
+-        ? `with ${emitExpression(stmt.contextExpr)} as ${stmt.target.name}:`
++        ? `with ${emitExpression(stmt.contextExpr)} as ${aliasIdentifier(stmt.target.name)}:`
+         : `with ${emitExpression(stmt.contextExpr)}:`;
+       const lines: string[] = [header];
+       for (const s of stmt.body) lines.push(indent(emitStatement(s)));
+@@ -256,7 +287,15 @@ export function emitStatement(stmt: Statement): string {
+       const params = stmt.params.map((p) => aliasIdentifier(p.name)).join(', ');
+       const kw = stmt.isAsync ? 'async def' : 'def';
+       lines.push(`${kw} ${aliasIdentifier(stmt.name)}(${params}):`);
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      // A def body is an ordinary local scope even when the def is a method,
++      // so class-attribute suppression must not leak into it.
++      const savedClassDepth = classBodyDepth;
++      classBodyDepth = 0;
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        classBodyDepth = savedClassDepth;
++      }
+       return lines.join('\n');
+     }
+     case 'OverlayAssign':
+@@ -291,7 +330,12 @@ export function emitStatement(stmt: Statement): string {
+     }
+     case 'ClassDef': {
+       const lines: string[] = [`class ${aliasIdentifier(stmt.name)}:`];
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      classBodyDepth++;
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        classBodyDepth--;
++      }
+       return lines.join('\n');
+     }
+   }
