@@ -7,7 +7,7 @@ The Board is the sole authority for status; this table is expected to go
 stale and must not be used to transition anything. Where they differ, the
 Board is right.
 
-Snapshot taken: **2026-08-22**.
+Snapshot taken: **2026-08-25**.
 
 Audit origin: `f77a43f` (efficientnewlanguage). **As of 2026-08-22 the product
 code is no longer unchanged against it.** The first product change landed at
@@ -29,8 +29,8 @@ untouched by that change, so for those two the distinction is still moot.
 |---|---|---|---|---|---|
 | EMLP-AUDIT-001 | CRITICAL | validator 只變動第一個數值自由變數 | `packages/ai-converter/src/validator.ts:112` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0033 |
 | EMLP-AUDIT-002 | CRITICAL | validator 丟棄崩潰輸入後仍認證候選 | `packages/ai-converter/src/validator.ts:126` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0034 |
-| EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | REPRODUCED | EMLP-RELAY-0010 |
-| EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | REPRODUCED | EMLP-RELAY-0010 |
+| EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
+| EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
 | EMLP-AUDIT-005 | MAJOR | 使用者函式不檢查引數數量 | `packages/interp/src/index.ts:620` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-006 | MAJOR | builtin arity／`int` base／零引數形狀錯誤 | `packages/interp/src/index.ts:721` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-007 | MAJOR | output 的 value/end 求值順序與 `end=None` 錯誤 | `packages/interp/src/index.ts:848` | REPORTED | original handoff, 2026-08-12 |
