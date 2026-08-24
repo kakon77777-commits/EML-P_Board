@@ -1,0 +1,219 @@
+diff --git a/packages/transpiler-python/src/emitter.ts b/packages/transpiler-python/src/emitter.ts
+index 8c6a0c8..48247c2 100644
+--- a/packages/transpiler-python/src/emitter.ts
++++ b/packages/transpiler-python/src/emitter.ts
+@@ -16,6 +16,90 @@ export function aliasIdentifier(name: string): string {
+   return IDENTIFIER_ALIASES[name] ?? name;
+ }
+ 
++/**
++ * EMLP-AUDIT-004 — binder x legal-reference resolution identity.
++ *
++ * A name bound in a CLASS BODY lands in the class namespace. It is read two
++ * ways, and both must reach the same binding:
++ *
++ *   inside the class body   as a bare name      `mirror = list`
++ *   outside the class       as an attribute     `c.list`
++ *
++ * Attribute access is never aliased, so neither half of a class-namespace name
++ * may be aliased either — binder *or* bare read. Aliasing only one side is what
++ * v1 of this fix did, and it turned a self-consistent (if oddly spelled) class
++ * into `list = 5` followed by `mirror = lst`, a NameError at class definition.
++ *
++ * Everywhere else the ordinary alias policy still applies, including inside a
++ * method: a `def` opens a normal local scope again.
++ *
++ * The rule is NOT "never alias inside a class". It is "a class-namespace name
++ * is spelled the same in every position", so a bare read of a MODULE-level
++ * name from inside a class body still aliases normally.
++ */
++type ScopeFrame = { kind: 'class'; names: Set<string> } | { kind: 'function' };
++
++const scopeStack: ScopeFrame[] = [];
++
++/** True when `name` is bound in the innermost enclosing CLASS body. */
++function isClassNamespaceName(name: string): boolean {
++  const top = scopeStack[scopeStack.length - 1];
++  return top !== undefined && top.kind === 'class' && top.names.has(name);
++}
++
++/** Emit an identifier in binder or read position, honouring class namespaces. */
++function emitName(name: string): string {
++  return isClassNamespaceName(name) ? name : aliasIdentifier(name);
++}
++
++/**
++ * Names bound directly in a class body, including inside nested `if`/`while`/
++ * `for`/`with`/`try` blocks, which bind into the same class namespace.
++ *
++ * A `def` or nested `class` binds ITS OWN NAME as a class attribute, but its
++ * body is a separate scope and is not descended into.
++ */
++function collectClassBindings(body: readonly Statement[], out: Set<string>): void {
++  for (const st of body) {
++    switch (st.type) {
++      case 'Assignment':
++      case 'AugmentedAssign':
++        if (st.target.type === 'Identifier') out.add(st.target.name);
++        break;
++      case 'ForIn':
++        out.add(st.target.name);
++        collectClassBindings(st.body, out);
++        break;
++      case 'With':
++        if (st.target) out.add(st.target.name);
++        collectClassBindings(st.body, out);
++        break;
++      case 'Try':
++        collectClassBindings(st.body, out);
++        for (const h of st.handlers) {
++          if (h.name) out.add(h.name);
++          collectClassBindings(h.body, out);
++        }
++        collectClassBindings(st.finallyBody, out);
++        break;
++      case 'If':
++        collectClassBindings(st.body, out);
++        collectClassBindings(st.orelse, out);
++        break;
++      case 'While':
++        collectClassBindings(st.body, out);
++        break;
++      case 'FunctionDef':
++      case 'ClassDef':
++        // the name is a class attribute; the body is its own scope
++        out.add(st.name);
++        break;
++      default:
++        break;
++    }
++  }
++}
++
+ /** Python expression precedence; higher binds tighter. */
+ function precedence(expr: Expression): number {
+   switch (expr.type) {
+@@ -72,7 +156,7 @@ function emitRangeEnd(end: Expression): string {
+ export function emitExpression(expr: Expression): string {
+   switch (expr.type) {
+     case 'Identifier':
+-      return aliasIdentifier(expr.name);
++      return emitName(expr.name);
+     case 'NumberLiteral':
+       return expr.raw;
+     case 'StringLiteral':
+@@ -83,14 +167,22 @@ export function emitExpression(expr: Expression): string {
+       return `${child(expr.base, 8, true)}**${child(expr.exponent, 8)}`;
+     case 'Binary': {
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      // `-`, `/`, and `%` are non-associative: an equal-precedence right
+-      // operand must be parenthesized to preserve grouping (a - (b - c) !=
+-      // a - b - c; a % (b % c) != a % b % c).
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // NO binary operator here is safe to re-associate. `-`, `/` and `%` are
++      // non-associative outright (a - (b - c) != a - b - c). `+` and `*` are
++      // non-associative in IEEE floating point, which EML numbers are:
++      //   1.0 + (1e16 + -1e16) == 1.0   but   (1.0 + 1e16) + -1e16 == 0.0
++      //   0.1 * (3.0 * 7.0) == 2.1      but   (0.1 * 3.0) * 7.0 == 2.1000000000000005
++      // So an equal-precedence RIGHT operand is always parenthesized. The left
++      // operand still is not: `a + b + c` is already left-associated.
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // Python CHAINS bare comparisons: `a == b == c` means
++      // `(a == b) and (b == c)`, not `(a == b) == c`. EML has no chaining (it
++      // rejects `a < b < c` at parse time), so a Comparison operand that is
++      // itself a Comparison must keep its parentheses on BOTH sides.
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       const prec = expr.op === 'or' ? 2 : 3;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec)}`;
+@@ -110,7 +202,12 @@ export function emitExpression(expr: Expression): string {
+     case 'Sum':
+       return `sum(${emitExpression(expr.expr)} for ${aliasIdentifier(expr.iterator.name)} in ${emitExpression(expr.range)})`;
+     case 'Membership':
+-      return `${emitExpression(expr.element)} in ${emitExpression(expr.collection)}`;
++      // `in` sits at comparison precedence and chains with comparisons, so both
++      // operands need the same treatment as `Comparison`. This previously called
++      // `emitExpression` directly, applying no precedence rule of any kind:
++      //   (a == b) in c  ->  a == b in c   (a chain, not a membership test)
++      //   x in (p or q)  ->  x in p or q   ((x in p) or q — returns q)
++      return `${child(expr.element, 5, true)} in ${child(expr.collection, 5, true)}`;
+     case 'Call': {
+       // An Identifier callee is NOT aliased: preserve genuine builtin calls
+       // like `list(1)`. An Attribute callee (`math.sqrt(x)`) re-emits through
+@@ -163,7 +260,7 @@ export function emitExpression(expr: Expression): string {
+ 
+ /** Emit an assignment target (Phase 7b: `AssignTarget` is Identifier | Subscript). */
+ function emitTarget(target: AssignTarget): string {
+-  if (target.type === 'Identifier') return aliasIdentifier(target.name);
++  if (target.type === 'Identifier') return emitName(target.name);
+   return emitExpression(target);
+ }
+ 
+@@ -211,7 +308,7 @@ export function emitStatement(stmt: Statement): string {
+       for (const h of stmt.handlers) {
+         const header = h.exceptionType
+           ? h.name
+-            ? `except ${h.exceptionType} as ${h.name}:`
++            ? `except ${h.exceptionType} as ${emitName(h.name)}:`
+             : `except ${h.exceptionType}:`
+           : 'except:';
+         lines.push(header);
+@@ -227,7 +324,7 @@ export function emitStatement(stmt: Statement): string {
+       return stmt.exception ? `raise ${emitExpression(stmt.exception)}` : 'raise';
+     case 'With': {
+       const header = stmt.target
+-        ? `with ${emitExpression(stmt.contextExpr)} as ${stmt.target.name}:`
++        ? `with ${emitExpression(stmt.contextExpr)} as ${emitName(stmt.target.name)}:`
+         : `with ${emitExpression(stmt.contextExpr)}:`;
+       const lines: string[] = [header];
+       for (const s of stmt.body) lines.push(indent(emitStatement(s)));
+@@ -255,8 +352,16 @@ export function emitStatement(stmt: Statement): string {
+       }
+       const params = stmt.params.map((p) => aliasIdentifier(p.name)).join(', ');
+       const kw = stmt.isAsync ? 'async def' : 'def';
+-      lines.push(`${kw} ${aliasIdentifier(stmt.name)}(${params}):`);
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      // The def NAME binds in the enclosing scope (a class attribute when the
++      // def is a method), so it is emitted before the new scope is pushed.
++      // Parameters are locals and keep the ordinary alias policy.
++      lines.push(`${kw} ${emitName(stmt.name)}(${params}):`);
++      scopeStack.push({ kind: 'function' });
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+     case 'OverlayAssign':
+@@ -284,14 +389,23 @@ export function emitStatement(stmt: Statement): string {
+     }
+     case 'ForIn': {
+       const lines: string[] = [
+-        `for ${aliasIdentifier(stmt.target.name)} in ${emitExpression(stmt.iterable)}:`,
++        `for ${emitName(stmt.target.name)} in ${emitExpression(stmt.iterable)}:`,
+       ];
+       for (const s of stmt.body) lines.push(indent(emitStatement(s)));
+       return lines.join('\n');
+     }
+     case 'ClassDef': {
+-      const lines: string[] = [`class ${aliasIdentifier(stmt.name)}:`];
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      // The class NAME binds in the enclosing scope; the body opens a class
++      // namespace in which every bound name is spelled unaliased.
++      const lines: string[] = [`class ${emitName(stmt.name)}:`];
++      const names = new Set<string>();
++      collectClassBindings(stmt.body, names);
++      scopeStack.push({ kind: 'class', names });
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+   }
