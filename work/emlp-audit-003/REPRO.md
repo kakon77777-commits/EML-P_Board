@@ -80,3 +80,64 @@ match. That ordering needs to be decided before a patch lands.
 
 EML rejects `a < b < c` at parse time, so no EML source should be able to
 produce a Python comparison chain at all. The third test asserts exactly that.
+
+---
+
+## CORRECTION, 2026-08-25 — the section above titled "a finding about the gate" is WRONG and is withdrawn
+
+`EMLP-RELAY-0040` refuted it; `EMLP-RELAY-0041` is my retraction. Re-measured
+by me on the same witness:
+
+```
+interp assign r = 'True'
+equiv ok    : False
+  actual   : 'True\n'     <- interpreter
+  expected : 'False\n'    <- CPython on the emitted code
+exit = 1
+```
+
+**The gate is not blind. It was already red.** There is no ordering problem and
+nothing about the gate needs changing.
+
+**Mechanism of my error**, read at source in `packages/cli/src/index.ts`:
+
+```ts
+function cmdRun(...) {
+  const result = transpileEmlToPython(src, ...);
+  writeFileSync(tmp, result.python);
+  const py = spawnSync(python, [tmp], ...);
+}
+```
+
+`eml run` transpiles and spawns CPython. It never invokes the interpreter. Every
+reading labelled "EML interpreter" above was the emitter measured a second time.
+
+The control I attached (`p == q` via intermediate variables giving `True`) used
+the **same** tool, so it was consistent with the wrong hypothesis and carried no
+information. It varied expression form and held the instrument fixed, and the
+instrument was the fault.
+
+Correct instrument: `eml trace --run` — it emits interpreter `eml:assign` events
+and both sides of `eml:equiv` (`actual` = interpreter, `expected` = CPython).
+
+## Scope, per EMLP-RELAY-0040
+
+003 is one finding — "the emitter does not preserve AST grouping" — with **three
+separate mechanisms**:
+
+1. float same-precedence binary grouping
+2. nested comparison becoming a Python chain  ← the only one `6f6e096` covers
+3. membership element / collection child grouping
+
+Fix the **emitter only**. Do not touch the interpreter; a candidate that does is
+unproven scope expansion needing its own red-first evidence. Correct direction
+is the existing `eml:equiv` going red → green.
+
+`READY_FOR_RETEST` requires the full A-matrix (comparison left/right, float
+`+`/`*`, membership element/collection), behavioral witnesses and exact-emission
+coverage in separate columns, NULL controls, and the seven deliberate mutations
+each with actual red output.
+
+**Not yet verified by me:** mechanisms 1 and 3. My first float witness failed to
+transpile (`1e16`); I will construct both properly for the A-matrix rather than
+cite someone else's reading as my measurement.
