@@ -1,0 +1,196 @@
+diff --git a/packages/transpiler-python/src/emitter.ts b/packages/transpiler-python/src/emitter.ts
+index 8c6a0c8..44c2dbe 100644
+--- a/packages/transpiler-python/src/emitter.ts
++++ b/packages/transpiler-python/src/emitter.ts
+@@ -16,6 +16,76 @@ export function aliasIdentifier(name: string): string {
+   return IDENTIFIER_ALIASES[name] ?? name;
+ }
+ 
++/**
++ * A frame on the emit-time scope stack.
++ *
++ * `class` carries the names that have become class attributes SO FAR in the
++ * body. It grows as statements are emitted, because Python executes a class
++ * body one statement at a time: a name is an attribute only from the statement
++ * after the one that binds it.
++ */
++type ScopeFrame = { kind: 'class'; names: Set<string> } | { kind: 'function' };
++
++const scopeStack: ScopeFrame[] = [];
++
++function currentClassFrame(): { kind: 'class'; names: Set<string> } | undefined {
++  const top = scopeStack[scopeStack.length - 1];
++  return top !== undefined && top.kind === 'class' ? top : undefined;
++}
++
++/**
++ * A READ of a bare name.
++ *
++ * Inside a class body a bare name is a class attribute only once the statement
++ * binding it has already run; before that it resolves outward, which for this
++ * emitter is the module alias:
++ *
++ *     5 => list
++ *     class C:
++ *         list => before      # before = lst   - not an attribute yet
++ *         7 => list           # list = 7       - and now it is
++ *
++ * Resolving `list` on the first body line against a whole-body binding set
++ * emits `before = list`, which Python reads as the builtin.
++ */
++function emitRead(name: string): string {
++  const frame = currentClassFrame();
++  return frame !== undefined && frame.names.has(name) ? name : aliasIdentifier(name);
++}
++
++/**
++ * A DEFINITION SITE.
++ *
++ * Inside a class body this creates a class attribute, so it is spelled
++ * unaliased whether or not the name is bound yet. That is the finding this
++ * exists for: `5 => list` in a class body must give `c.list`, not `c.lst`.
++ */
++function emitBinding(name: string): string {
++  return currentClassFrame() !== undefined ? name : aliasIdentifier(name);
++}
++
++/**
++ * Record the class attribute a class-body statement creates.
++ *
++ * Called AFTER the statement is emitted, so reads inside it have already
++ * resolved against the namespace as it stood before it.
++ *
++ * Only the two shapes the analyzer admits in a class body are modelled.
++ * Measured against the analyzer on 2026-08-26: a plain Assignment is ok and a
++ * method FunctionDef is ok; AugmentedAssign, a nested ClassDef, ForIn, With,
++ * If, While, Try and a bare expression are all E_CLASS_BODY_UNSUPPORTED and
++ * never reach this path.
++ */
++function bindClassAttribute(stmt: Statement): void {
++  const frame = currentClassFrame();
++  if (frame === undefined) return;
++  if (stmt.type === 'Assignment' && stmt.target.type === 'Identifier') {
++    frame.names.add(stmt.target.name);
++  } else if (stmt.type === 'FunctionDef') {
++    frame.names.add(stmt.name);
++  }
++}
++
+ /** Python expression precedence; higher binds tighter. */
+ function precedence(expr: Expression): number {
+   switch (expr.type) {
+@@ -72,7 +142,7 @@ function emitRangeEnd(end: Expression): string {
+ export function emitExpression(expr: Expression): string {
+   switch (expr.type) {
+     case 'Identifier':
+-      return aliasIdentifier(expr.name);
++      return emitRead(expr.name);
+     case 'NumberLiteral':
+       return expr.raw;
+     case 'StringLiteral':
+@@ -83,14 +153,20 @@ export function emitExpression(expr: Expression): string {
+       return `${child(expr.base, 8, true)}**${child(expr.exponent, 8)}`;
+     case 'Binary': {
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      // `-`, `/`, and `%` are non-associative: an equal-precedence right
+-      // operand must be parenthesized to preserve grouping (a - (b - c) !=
+-      // a - b - c; a % (b % c) != a % b % c).
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // NO binary operator is safe to re-associate here. `-`, `/` and `%` are
++      // non-associative in the algebraic sense, but `+` and `*` are also
++      // non-associative in IEEE-754: (a + b) + c != a + (b + c) once rounding
++      // is involved. The emitter cannot know a float is not in play, so an
++      // equal-precedence right operand is always parenthesized.
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // Python CHAINS bare comparisons: `a < b < c` means `a < b and b < c`,
++      // not `(a < b) < c`. EML has no chaining, so a comparison appearing as
++      // an operand of another comparison must be parenthesized - hence
++      // orEqual on BOTH sides.
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       const prec = expr.op === 'or' ? 2 : 3;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec)}`;
+@@ -110,7 +186,10 @@ export function emitExpression(expr: Expression): string {
+     case 'Sum':
+       return `sum(${emitExpression(expr.expr)} for ${aliasIdentifier(expr.iterator.name)} in ${emitExpression(expr.range)})`;
+     case 'Membership':
+-      return `${emitExpression(expr.element)} in ${emitExpression(expr.collection)}`;
++      // `in` is a comparison operator in Python and chains with the others, so
++      // it needs the same treatment as Comparison. This previously called
++      // emitExpression directly, which applied no precedence rule at all.
++      return `${child(expr.element, 5, true)} in ${child(expr.collection, 5, true)}`;
+     case 'Call': {
+       // An Identifier callee is NOT aliased: preserve genuine builtin calls
+       // like `list(1)`. An Attribute callee (`math.sqrt(x)`) re-emits through
+@@ -163,7 +242,7 @@ export function emitExpression(expr: Expression): string {
+ 
+ /** Emit an assignment target (Phase 7b: `AssignTarget` is Identifier | Subscript). */
+ function emitTarget(target: AssignTarget): string {
+-  if (target.type === 'Identifier') return aliasIdentifier(target.name);
++  if (target.type === 'Identifier') return emitBinding(target.name);
+   return emitExpression(target);
+ }
+ 
+@@ -211,7 +290,7 @@ export function emitStatement(stmt: Statement): string {
+       for (const h of stmt.handlers) {
+         const header = h.exceptionType
+           ? h.name
+-            ? `except ${h.exceptionType} as ${h.name}:`
++            ? `except ${h.exceptionType} as ${emitBinding(h.name)}:`
+             : `except ${h.exceptionType}:`
+           : 'except:';
+         lines.push(header);
+@@ -227,7 +306,7 @@ export function emitStatement(stmt: Statement): string {
+       return stmt.exception ? `raise ${emitExpression(stmt.exception)}` : 'raise';
+     case 'With': {
+       const header = stmt.target
+-        ? `with ${emitExpression(stmt.contextExpr)} as ${stmt.target.name}:`
++        ? `with ${emitExpression(stmt.contextExpr)} as ${emitBinding(stmt.target.name)}:`
+         : `with ${emitExpression(stmt.contextExpr)}:`;
+       const lines: string[] = [header];
+       for (const s of stmt.body) lines.push(indent(emitStatement(s)));
+@@ -255,8 +334,15 @@ export function emitStatement(stmt: Statement): string {
+       }
+       const params = stmt.params.map((p) => aliasIdentifier(p.name)).join(', ');
+       const kw = stmt.isAsync ? 'async def' : 'def';
+-      lines.push(`${kw} ${aliasIdentifier(stmt.name)}(${params}):`);
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      lines.push(`${kw} ${emitBinding(stmt.name)}(${params}):`);
++      // A method body is an ordinary local scope: it does NOT see the class
++      // namespace, so names inside it go back to the module alias policy.
++      scopeStack.push({ kind: 'function' });
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+     case 'OverlayAssign':
+@@ -290,8 +376,20 @@ export function emitStatement(stmt: Statement): string {
+       return lines.join('\n');
+     }
+     case 'ClassDef': {
+-      const lines: string[] = [`class ${aliasIdentifier(stmt.name)}:`];
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      // The class NAME binds in the enclosing scope. The body opens a class
++      // namespace built IN SOURCE ORDER: emit each statement first, so its
++      // reads resolve against the namespace as it stood before it, then record
++      // the attribute that statement creates.
++      const lines: string[] = [`class ${emitBinding(stmt.name)}:`];
++      scopeStack.push({ kind: 'class', names: new Set<string>() });
++      try {
++        for (const s of stmt.body) {
++          lines.push(indent(emitStatement(s)));
++          bindClassAttribute(s);
++        }
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+   }

@@ -1,0 +1,8 @@
+5 => list
+
+class C:
+    list => before
+    7 => list
+
+C() => c
+str(c.before)^0
