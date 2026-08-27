@@ -1,0 +1,5 @@
+# EMLP-AUDIT-024. C++ splits comparison across two precedence tiers: `<`
+# binds tighter than `!=`. The EML AST is ((1 != 2) < 1) + 0, which the
+# interpreter and real CPython both evaluate to 0. Emitted without the
+# parentheses the AST requires, C++ reads it as 1 != (2 < 1) and prints 1.
+(((1 != 2) < 1) + 0)^0

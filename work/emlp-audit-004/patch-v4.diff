@@ -1,0 +1,409 @@
+diff --git a/docs/EML-LANG-2026-v1.0.md b/docs/EML-LANG-2026-v1.0.md
+index 32fbe90..d10b73c 100644
+--- a/docs/EML-LANG-2026-v1.0.md
++++ b/docs/EML-LANG-2026-v1.0.md
+@@ -395,8 +395,10 @@ builtin call like `list(1)` is preserved).
+ integers; a non-integer literal bound is `E_RANGE_NONINT`. Emitter precedence (tightest → loosest,
+ as of Phase 9): power(8) > mul/div/mod(7) > add/sub(6) > comparison/membership(5) > not(4) > and(3) >
+ or(2) > conditional(1). The emitter parenthesizes minimally and exactly to preserve grouping; `**` is
+-right-associative (its base is parenthesized), `-`/`/`/`%` are non-associative (an equal-precedence
+-right operand is parenthesized — `a % (b % c)` keeps its parens, unlike `a + (b + c)`), and `and`/`or`
++right-associative (its base is parenthesized), **no binary operator is re-associated** (an
++equal-precedence right operand is always parenthesized — `a % (b % c)` keeps its parens, and so does
++`a + (b + c)`, because floating-point addition and multiplication are non-associative under
++IEEE-754), and `and`/`or`
+ are associative in value (so an equal-precedence child is never force-parenthesized) but `and` binds
+ tighter than `or`, matching Python exactly. **`not` binds tighter than `and`/`or` but looser than
+ comparison** — `not x > 5` stays bare (means `not (x > 5)`, comparison binds tighter), `not (a or b)`
+diff --git a/packages/transpiler-cpp/src/emitter.ts b/packages/transpiler-cpp/src/emitter.ts
+index 256e849..a4a6c52 100644
+--- a/packages/transpiler-cpp/src/emitter.ts
++++ b/packages/transpiler-cpp/src/emitter.ts
+@@ -92,11 +92,19 @@ export function emitCppExpression(expr: Expression): string {
+         throw new CppEmitError('C⁺⁺⁺ `%` requires integer operands (a non-integer literal was used) — C++ modulo does not support floating-point types.');
+       }
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // Same policy as the Python emitter (EMLP-AUDIT-003 / 024): floating
++      // point addition and multiplication are non-associative, so an
++      // equal-precedence right operand is always parenthesized.
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // C++ splits comparison across TWO precedence tiers - relational `<`
++      // binds tighter than equality `!=` - while this table gives both 5. So
++      // `((1 != 2) < 1)` emitted bare becomes `1 != 2 < 1`, which C++ reads as
++      // `1 != (2 < 1)`: a different value. Parenthesizing any nested
++      // comparison is correct under either tier (EMLP-AUDIT-024).
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       // C++ && / || always yield bool; Python's and/or yield an OPERAND
+       // (short-circuit value). This is a real, deliberate narrowing for this
+diff --git a/packages/transpiler-eml/src/eml-emitter.ts b/packages/transpiler-eml/src/eml-emitter.ts
+index 6a7c177..b6b98d6 100644
+--- a/packages/transpiler-eml/src/eml-emitter.ts
++++ b/packages/transpiler-eml/src/eml-emitter.ts
+@@ -105,11 +105,18 @@ export function emitEmlExpression(expr: Expression): string {
+       return `${child(expr.base, 8, true)}^${emitEmlExpression(expr.exponent)}`;
+     case 'Binary': {
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // Same policy as the forward emitter (EMLP-AUDIT-003): NO binary operator
++      // is safe to re-associate. `+` and `*` are non-associative in IEEE-754,
++      // so an equal-precedence right operand is always parenthesized. The
++      // reverse path must match, or Python -> EML -> Python stops being a
++      // fixpoint for the supported subset (EMLP-AUDIT-023).
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // EML does not chain comparisons, so a comparison in either operand
++      // position must keep its parentheses - hence orEqual on both sides.
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       const prec = expr.op === 'or' ? 2 : 3;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec)}`;
+@@ -123,7 +130,10 @@ export function emitEmlExpression(expr: Expression): string {
+     case 'Sum':
+       return `Σ(${emitEmlExpression(expr.expr)}, ${expr.iterator.name} in ${emitEmlExpression(expr.range)})`;
+     case 'Membership':
+-      return `${emitEmlExpression(expr.element)} in ${emitEmlExpression(expr.collection)}`;
++      // This previously called emitEmlExpression directly, applying no
++      // precedence rule at all: `(not 0) in []` came back as `not 0 in []`,
++      // which parses as `not (0 in [])` and is a different program.
++      return `${child(expr.element, 5, true)} in ${child(expr.collection, 5, true)}`;
+     case 'Call':
+       if (expr.callee.type !== 'Identifier' && expr.callee.type !== 'Attribute') {
+         throw new EmlEmitError('Reverse Python->EML does not yet support this call form.');
+diff --git a/packages/transpiler-python/src/emitter.ts b/packages/transpiler-python/src/emitter.ts
+index 8c6a0c8..44c2dbe 100644
+--- a/packages/transpiler-python/src/emitter.ts
++++ b/packages/transpiler-python/src/emitter.ts
+@@ -16,6 +16,76 @@ export function aliasIdentifier(name: string): string {
+   return IDENTIFIER_ALIASES[name] ?? name;
+ }
+ 
++/**
++ * A frame on the emit-time scope stack.
++ *
++ * `class` carries the names that have become class attributes SO FAR in the
++ * body. It grows as statements are emitted, because Python executes a class
++ * body one statement at a time: a name is an attribute only from the statement
++ * after the one that binds it.
++ */
++type ScopeFrame = { kind: 'class'; names: Set<string> } | { kind: 'function' };
++
++const scopeStack: ScopeFrame[] = [];
++
++function currentClassFrame(): { kind: 'class'; names: Set<string> } | undefined {
++  const top = scopeStack[scopeStack.length - 1];
++  return top !== undefined && top.kind === 'class' ? top : undefined;
++}
++
++/**
++ * A READ of a bare name.
++ *
++ * Inside a class body a bare name is a class attribute only once the statement
++ * binding it has already run; before that it resolves outward, which for this
++ * emitter is the module alias:
++ *
++ *     5 => list
++ *     class C:
++ *         list => before      # before = lst   - not an attribute yet
++ *         7 => list           # list = 7       - and now it is
++ *
++ * Resolving `list` on the first body line against a whole-body binding set
++ * emits `before = list`, which Python reads as the builtin.
++ */
++function emitRead(name: string): string {
++  const frame = currentClassFrame();
++  return frame !== undefined && frame.names.has(name) ? name : aliasIdentifier(name);
++}
++
++/**
++ * A DEFINITION SITE.
++ *
++ * Inside a class body this creates a class attribute, so it is spelled
++ * unaliased whether or not the name is bound yet. That is the finding this
++ * exists for: `5 => list` in a class body must give `c.list`, not `c.lst`.
++ */
++function emitBinding(name: string): string {
++  return currentClassFrame() !== undefined ? name : aliasIdentifier(name);
++}
++
++/**
++ * Record the class attribute a class-body statement creates.
++ *
++ * Called AFTER the statement is emitted, so reads inside it have already
++ * resolved against the namespace as it stood before it.
++ *
++ * Only the two shapes the analyzer admits in a class body are modelled.
++ * Measured against the analyzer on 2026-08-26: a plain Assignment is ok and a
++ * method FunctionDef is ok; AugmentedAssign, a nested ClassDef, ForIn, With,
++ * If, While, Try and a bare expression are all E_CLASS_BODY_UNSUPPORTED and
++ * never reach this path.
++ */
++function bindClassAttribute(stmt: Statement): void {
++  const frame = currentClassFrame();
++  if (frame === undefined) return;
++  if (stmt.type === 'Assignment' && stmt.target.type === 'Identifier') {
++    frame.names.add(stmt.target.name);
++  } else if (stmt.type === 'FunctionDef') {
++    frame.names.add(stmt.name);
++  }
++}
++
+ /** Python expression precedence; higher binds tighter. */
+ function precedence(expr: Expression): number {
+   switch (expr.type) {
+@@ -72,7 +142,7 @@ function emitRangeEnd(end: Expression): string {
+ export function emitExpression(expr: Expression): string {
+   switch (expr.type) {
+     case 'Identifier':
+-      return aliasIdentifier(expr.name);
++      return emitRead(expr.name);
+     case 'NumberLiteral':
+       return expr.raw;
+     case 'StringLiteral':
+@@ -83,14 +153,20 @@ export function emitExpression(expr: Expression): string {
+       return `${child(expr.base, 8, true)}**${child(expr.exponent, 8)}`;
+     case 'Binary': {
+       const prec = expr.op === '+' || expr.op === '-' ? 6 : 7;
+-      // `-`, `/`, and `%` are non-associative: an equal-precedence right
+-      // operand must be parenthesized to preserve grouping (a - (b - c) !=
+-      // a - b - c; a % (b % c) != a % b % c).
+-      const nonAssoc = expr.op === '-' || expr.op === '/' || expr.op === '%';
++      // NO binary operator is safe to re-associate here. `-`, `/` and `%` are
++      // non-associative in the algebraic sense, but `+` and `*` are also
++      // non-associative in IEEE-754: (a + b) + c != a + (b + c) once rounding
++      // is involved. The emitter cannot know a float is not in play, so an
++      // equal-precedence right operand is always parenthesized.
++      const nonAssoc = true;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec, nonAssoc)}`;
+     }
+     case 'Comparison':
+-      return `${child(expr.left, 5)} ${expr.op} ${child(expr.right, 5)}`;
++      // Python CHAINS bare comparisons: `a < b < c` means `a < b and b < c`,
++      // not `(a < b) < c`. EML has no chaining, so a comparison appearing as
++      // an operand of another comparison must be parenthesized - hence
++      // orEqual on BOTH sides.
++      return `${child(expr.left, 5, true)} ${expr.op} ${child(expr.right, 5, true)}`;
+     case 'Logical': {
+       const prec = expr.op === 'or' ? 2 : 3;
+       return `${child(expr.left, prec)} ${expr.op} ${child(expr.right, prec)}`;
+@@ -110,7 +186,10 @@ export function emitExpression(expr: Expression): string {
+     case 'Sum':
+       return `sum(${emitExpression(expr.expr)} for ${aliasIdentifier(expr.iterator.name)} in ${emitExpression(expr.range)})`;
+     case 'Membership':
+-      return `${emitExpression(expr.element)} in ${emitExpression(expr.collection)}`;
++      // `in` is a comparison operator in Python and chains with the others, so
++      // it needs the same treatment as Comparison. This previously called
++      // emitExpression directly, which applied no precedence rule at all.
++      return `${child(expr.element, 5, true)} in ${child(expr.collection, 5, true)}`;
+     case 'Call': {
+       // An Identifier callee is NOT aliased: preserve genuine builtin calls
+       // like `list(1)`. An Attribute callee (`math.sqrt(x)`) re-emits through
+@@ -163,7 +242,7 @@ export function emitExpression(expr: Expression): string {
+ 
+ /** Emit an assignment target (Phase 7b: `AssignTarget` is Identifier | Subscript). */
+ function emitTarget(target: AssignTarget): string {
+-  if (target.type === 'Identifier') return aliasIdentifier(target.name);
++  if (target.type === 'Identifier') return emitBinding(target.name);
+   return emitExpression(target);
+ }
+ 
+@@ -211,7 +290,7 @@ export function emitStatement(stmt: Statement): string {
+       for (const h of stmt.handlers) {
+         const header = h.exceptionType
+           ? h.name
+-            ? `except ${h.exceptionType} as ${h.name}:`
++            ? `except ${h.exceptionType} as ${emitBinding(h.name)}:`
+             : `except ${h.exceptionType}:`
+           : 'except:';
+         lines.push(header);
+@@ -227,7 +306,7 @@ export function emitStatement(stmt: Statement): string {
+       return stmt.exception ? `raise ${emitExpression(stmt.exception)}` : 'raise';
+     case 'With': {
+       const header = stmt.target
+-        ? `with ${emitExpression(stmt.contextExpr)} as ${stmt.target.name}:`
++        ? `with ${emitExpression(stmt.contextExpr)} as ${emitBinding(stmt.target.name)}:`
+         : `with ${emitExpression(stmt.contextExpr)}:`;
+       const lines: string[] = [header];
+       for (const s of stmt.body) lines.push(indent(emitStatement(s)));
+@@ -255,8 +334,15 @@ export function emitStatement(stmt: Statement): string {
+       }
+       const params = stmt.params.map((p) => aliasIdentifier(p.name)).join(', ');
+       const kw = stmt.isAsync ? 'async def' : 'def';
+-      lines.push(`${kw} ${aliasIdentifier(stmt.name)}(${params}):`);
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      lines.push(`${kw} ${emitBinding(stmt.name)}(${params}):`);
++      // A method body is an ordinary local scope: it does NOT see the class
++      // namespace, so names inside it go back to the module alias policy.
++      scopeStack.push({ kind: 'function' });
++      try {
++        for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+     case 'OverlayAssign':
+@@ -290,8 +376,20 @@ export function emitStatement(stmt: Statement): string {
+       return lines.join('\n');
+     }
+     case 'ClassDef': {
+-      const lines: string[] = [`class ${aliasIdentifier(stmt.name)}:`];
+-      for (const s of stmt.body) lines.push(indent(emitStatement(s)));
++      // The class NAME binds in the enclosing scope. The body opens a class
++      // namespace built IN SOURCE ORDER: emit each statement first, so its
++      // reads resolve against the namespace as it stood before it, then record
++      // the attribute that statement creates.
++      const lines: string[] = [`class ${emitBinding(stmt.name)}:`];
++      scopeStack.push({ kind: 'class', names: new Set<string>() });
++      try {
++        for (const s of stmt.body) {
++          lines.push(indent(emitStatement(s)));
++          bindClassAttribute(s);
++        }
++      } finally {
++        scopeStack.pop();
++      }
+       return lines.join('\n');
+     }
+   }
+diff --git a/scripts/semantic-monitor.baseline.json b/scripts/semantic-monitor.baseline.json
+index 6645d0f..9d16321 100644
+--- a/scripts/semantic-monitor.baseline.json
++++ b/scripts/semantic-monitor.baseline.json
+@@ -1,33 +1,33 @@
+ {
+-  "programs": 315,
++  "programs": 576,
+   "coverage": {
+     "sigma-summation": 9,
+     "cold-annotation": 5,
+     "hot-annotation": 3,
+     "ternary": 1,
+     "class": 23,
+-    "try-except": 43,
++    "try-except": 44,
+     "except-as": 26,
+-    "raise": 27,
++    "raise": 28,
+     "finally": 4,
+     "with-context-manager": 6,
+-    "list-comprehension": 6,
+-    "slice": 36,
+-    "dict-literal": 34,
+-    "percent-format": 94,
+-    "modulo": 61,
+-    "and-or": 194,
+-    "not": 182,
+-    "break": 16,
+-    "continue": 3,
+-    "pass": 4,
+-    "while": 127,
+-    "compound-assign": 126,
+-    "print-end": 188,
++    "list-comprehension": 9,
++    "slice": 37,
++    "dict-literal": 35,
++    "percent-format": 104,
++    "modulo": 83,
++    "and-or": 452,
++    "not": 397,
++    "break": 17,
++    "continue": 5,
++    "pass": 15,
++    "while": 142,
++    "compound-assign": 127,
++    "print-end": 201,
+     "triple-quoted-string": 1,
+-    "sequence-repeat": 43,
+-    "nested-def": 274,
+-    "float-division": 96
++    "sequence-repeat": 92,
++    "nested-def": 438,
++    "float-division": 250
+   },
+   "hashes": {
+     "packages/interp/src/values.ts": "a6105a432e5d3c27",
+@@ -38,19 +38,23 @@
+     "tests/operator-matrix.test.ts": "dabec950984b5fca",
+     "tests/statement-interaction.test.ts": "81352156cb414ca7",
+     "packages/interp/src/index.ts": "71e3e06bfde10357",
+-    "tests/interp.test.ts": "fa476543fc42b70a",
++    "tests/interp.test.ts": "bc51bfbf5f3ce78e",
+     "tests/trace-completeness.test.ts": "db42e0f80f7f669c",
+     "tests/evaluation-order.test.ts": "91e38917b6b7c3a8",
+     "tests/aliasing-visibility.test.ts": "9180804214e757c6",
+-    "packages/transpiler-python/src/emitter.ts": "e62e5a7b480e868f",
++    "packages/transpiler-python/src/emitter.ts": "fb0d92c15f6d3ea4",
++    "tests/gate-sensitivity.test.ts": "54fbed699e656583",
+     "packages/parser/src/parser.ts": "dea3b2e89f91579a",
+     "tests/parser.test.ts": "2ca75fcb0c0dc562",
+     "packages/parser/src/lexer.ts": "ed3cb3f86f674279",
+     "packages/transpiler-python/src/semantic.ts": "217396d06773ad6f",
+-    "packages/transpiler-eml/src/eml-emitter.ts": "28aa59295eb443b3",
++    "packages/transpiler-eml/src/eml-emitter.ts": "a25d5d41295696a2",
+     "tests/reverse-regression.test.ts": "4c66cec7b8957030",
+     "tests/reverse-blocks.test.ts": "758c580e1194e983",
+     "tests/rebinding-across-scopes.test.ts": "fc82d636793ac3e2",
++    "tests/grouping-round-trip.test.ts": "4136fe6e4b9e8a27",
++    "packages/transpiler-cpp/src/emitter.ts": "f85b043f4fcb2c63",
++    "tests/transpiler-cpp.test.ts": "1b60102435218ac6",
+     "packages/transpiler-eml/src/py-parser.ts": "12467f1229d7acfd",
+     "packages/transpiler-eml/src/py-lexer.ts": "740eaae338206c23",
+     "packages/transpiler-python/src/purity.ts": "6d5876c407823c2f",
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index ea65be6..eb2c70a 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -284,12 +284,28 @@ const SEMANTIC_FILES = [
+     // analyzer's. The two listed before it both exercise the reverse path one
+     // construct at a time, which is why neither could see it: the disagreement
+     // only shows when ONE NAME is assigned in TWO scopes.
++    // `grouping-round-trip` was added 2026-08-27 after EMLP-AUDIT-023: the
++    // forward emitter was taught to keep a paren the AST requires and this
++    // file was still removing it, so Python -> EML -> Python stopped being a
++    // fixpoint. None of the three above could see it - each exercises the
++    // reverse path for what it can EXPRESS, and this was about what it
++    // silently REGROUPS.
+     [
+       'tests/reverse-regression.test.ts',
+       'tests/reverse-blocks.test.ts',
+       'tests/rebinding-across-scopes.test.ts',
++      'tests/grouping-round-trip.test.ts',
+     ],
+   ],
++  // Added 2026-08-27. This file was tracked by NOTHING, and it decides what a
++  // program means once compiled - EMLP-AUDIT-024 shipped a grouping bug that
++  // real MSVC computed differently from the interpreter, with the monitor
++  // silent the whole time. The C++ back end is non-normative per spec §11,
++  // which is a reason for a smaller blast radius, not for no drift check.
++  [
++    'packages/transpiler-cpp/src/emitter.ts',
++    ['tests/transpiler-cpp.test.ts', 'tests/grouping-round-trip.test.ts'],
++  ],
+   ['packages/transpiler-eml/src/py-parser.ts', ['tests/reverse-regression.test.ts', 'tests/reverse-blocks.test.ts']],
+   ['packages/transpiler-eml/src/py-lexer.ts', ['tests/reverse-regression.test.ts', 'tests/reverse-blocks.test.ts']],
+   // Added 2026-08-05, and the third instance of the same hole. None of these
+diff --git a/tests/transpiler-cpp.test.ts b/tests/transpiler-cpp.test.ts
+index dfd450d..f0c2002 100644
+--- a/tests/transpiler-cpp.test.ts
++++ b/tests/transpiler-cpp.test.ts
+@@ -179,6 +179,11 @@ const expectedStdout: Record<string, string> = {
+   sum_squares: '338350',
+   square_sum_fn: '338350',
+   conditional: '1\n1',
++  // EMLP-AUDIT-024: the AST is ((1 != 2) < 1) + 0. Interpreter and real
++  // CPython both give 0. Before the grouping fix the C++ emitter dropped
++  // the parens and real MSVC printed 1, because C++ binds `<` tighter
++  // than `!=`.
++  grouping_comparison: '0',
+ };
+ 
+ describe.skipIf(!toolchain)(`Phase 4 — C++ compiles + runs (via ${toolchain?.kind ?? 'no compiler'})`, () => {
