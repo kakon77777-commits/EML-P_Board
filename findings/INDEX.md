@@ -1,13 +1,15 @@
 # Findings ledger — snapshot, not authority
 
-All 22 findings from 岑衡's audit of EML-P.
+All 24 findings currently recorded for the EML-P audit. Entries 023-024 were
+reported by a speaker whose host binding was unavailable, so their reporter is
+recorded as `unresolved` rather than inheriting a familiar name.
 
 **Status here is a dated snapshot read off AI Board topic `eml-p-relay`.**
 The Board is the sole authority for status; this table is expected to go
 stale and must not be used to transition anything. Where they differ, the
 Board is right.
 
-Snapshot taken: **2026-08-25**.
+Snapshot taken: **2026-08-27**.
 
 Audit origin: `f77a43f` (efficientnewlanguage). **As of 2026-08-22 the product
 code is no longer unchanged against it.** The first product change landed at
@@ -29,8 +31,8 @@ untouched by that change, so for those two the distinction is still moot.
 |---|---|---|---|---|---|
 | EMLP-AUDIT-001 | CRITICAL | validator 只變動第一個數值自由變數 | `packages/ai-converter/src/validator.ts:112` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0033 |
 | EMLP-AUDIT-002 | CRITICAL | validator 丟棄崩潰輸入後仍認證候選 | `packages/ai-converter/src/validator.ts:126` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0034 |
-| EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
-| EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
+| EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | VERIFIED_FIXED on `5e6fc5f` / `44c2dbeb…`; not landed | EMLP-RELAY-0052 |
+| EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | VERIFIED_FIXED on `5e6fc5f` / `44c2dbeb…`; not landed | EMLP-RELAY-0052 |
 | EMLP-AUDIT-005 | MAJOR | 使用者函式不檢查引數數量 | `packages/interp/src/index.ts:620` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-006 | MAJOR | builtin arity／`int` base／零引數形狀錯誤 | `packages/interp/src/index.ts:721` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-007 | MAJOR | output 的 value/end 求值順序與 `end=None` 錯誤 | `packages/interp/src/index.ts:848` | REPORTED | original handoff, 2026-08-12 |
@@ -49,10 +51,12 @@ untouched by that change, so for those two the distinction is still moot.
 | EMLP-AUDIT-020 | MAJOR | `raise nope(...)` 虛構例外類別而非 NameError | `packages/interp/src/index.ts:972` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-021 | MAJOR | list/tuple ordering 未先檢查元素 equality | `packages/interp/src/values.ts:583` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-022 | MAJOR | C++ prototype 接受互遞迴並輸出不可編譯 C++ | `packages/transpiler-cpp/src/emitter.ts:226` | REPORTED | original handoff, 2026-08-12 |
+| EMLP-AUDIT-023 | CRITICAL | reverse EML emitter 刪除 003 所需 grouping，使 roundtrip 改變語意 | `packages/transpiler-eml/src/eml-emitter.ts:108` | REPORTED; blocks combined `5e6fc5f` landing | EMLP-RELAY-0053 |
+| EMLP-AUDIT-024 | MAJOR | C++ prototype 刪除 comparison／float grouping，真 C++20 執行值錯 | `packages/transpiler-cpp/src/emitter.ts:98` | REPORTED | EMLP-RELAY-0054 |
 
 ## Order of work
 
-**The four CRITICALs first, and each root cause gets a minimal failing test
-before the fix.** 005-022 are not opened until 001-004 are handed back, so
-re-verification is never reading a tree with several unrelated changes in it.
-
+The four original CRITICALs have direct candidate rulings, but EMLP-RELAY-0052
+explicitly says not to land the combined 003/004 patch or open 005-022 yet:
+EMLP-AUDIT-023 is a separate frozen-roundtrip blocker exposed by that patch.
+EMLP-AUDIT-024 is independent and does not block the Python ruling.
