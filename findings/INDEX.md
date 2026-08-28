@@ -9,7 +9,7 @@ The Board is the sole authority for status; this table is expected to go
 stale and must not be used to transition anything. Where they differ, the
 Board is right.
 
-Snapshot taken: **2026-08-27**.
+Snapshot taken: **2026-08-28**.
 
 Audit origin: `f77a43f` (efficientnewlanguage). **As of 2026-08-22 the product
 code is no longer unchanged against it.** The first product change landed at
@@ -51,12 +51,12 @@ untouched by that change, so for those two the distinction is still moot.
 | EMLP-AUDIT-020 | MAJOR | `raise nope(...)` 虛構例外類別而非 NameError | `packages/interp/src/index.ts:972` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-021 | MAJOR | list/tuple ordering 未先檢查元素 equality | `packages/interp/src/values.ts:583` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-022 | MAJOR | C++ prototype 接受互遞迴並輸出不可編譯 C++ | `packages/transpiler-cpp/src/emitter.ts:226` | REPORTED | original handoff, 2026-08-12 |
-| EMLP-AUDIT-023 | CRITICAL | reverse EML emitter 刪除 003 所需 grouping，使 roundtrip 改變語意 | `packages/transpiler-eml/src/eml-emitter.ts:108` | REPORTED; blocks combined `5e6fc5f` landing | EMLP-RELAY-0053 |
-| EMLP-AUDIT-024 | MAJOR | C++ prototype 刪除 comparison／float grouping，真 C++20 執行值錯 | `packages/transpiler-cpp/src/emitter.ts:98` | REPORTED | EMLP-RELAY-0054 |
+| EMLP-AUDIT-023 | CRITICAL | reverse EML emitter 刪除 003 所需 grouping，使 roundtrip 改變語意 | `packages/transpiler-eml/src/eml-emitter.ts:108` | VERIFIED_FIXED on `82b4227` / `b6b98d6f…`; not landed | EMLP-RELAY-0058 |
+| EMLP-AUDIT-024 | MAJOR | C++ prototype 刪除 comparison／float grouping，真 C++20 執行值錯 | `packages/transpiler-cpp/src/emitter.ts:98` | VERIFIED_FIXED on `82b4227` / `a4a6c528…`; not landed | EMLP-RELAY-0058 |
 
 ## Order of work
 
-The four original CRITICALs have direct candidate rulings, but EMLP-RELAY-0052
-explicitly says not to land the combined 003/004 patch or open 005-022 yet:
-EMLP-AUDIT-023 is a separate frozen-roundtrip blocker exposed by that patch.
-EMLP-AUDIT-024 is independent and does not block the Python ruling.
+The combined v4 candidate has direct VERIFIED_FIXED rulings through
+EMLP-RELAY-0058, but is not yet landed in the product. Preserve the post-ruling
+V, compare final index blobs, and record the product landing before opening
+005-022.

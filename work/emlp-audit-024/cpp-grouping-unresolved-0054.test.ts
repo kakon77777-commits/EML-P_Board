@@ -24,6 +24,9 @@ import { transpileEmlToCpp } from '@eml/transpiler-cpp';
 const COMPARISON = '(((1 != 2) < 1) + 0)^0\n';
 const FLOAT =
   '0 - 1.0 => a\n10000000000000000.0 => b\n0 - 10000000000000000.0 => c\n(a + (b + c))^0\n';
+const RIGHT_COMPARISON = '((0 < (2 == 2)) + 0)^0\n';
+const FLOAT_MULTIPLICATION =
+  '0.1 => a\n0.1 => b\n0.3 => c\n((a * (b * c) == 0.003) + 0)^0\n';
 
 type Toolchain = { kind: 'posix'; cmd: string } | { kind: 'msvc'; vcvars: string };
 
@@ -103,6 +106,18 @@ describe('EMLP-AUDIT-024 — structural grouping coverage', () => {
     expect(r.ok, JSON.stringify(r.diagnostics)).toBe(true);
     expect(r.cpp).toContain('std::cout << a + (b + c) << "\\n";');
   });
+
+  it('0058 V: keeps equality nested on the right of a relational comparison', () => {
+    const r = transpileEmlToCpp(RIGHT_COMPARISON);
+    expect(r.ok, JSON.stringify(r.diagnostics)).toBe(true);
+    expect(r.cpp).toContain('0 < (2 == 2)');
+  });
+
+  it('0058 V: keeps different right-associated multiplication values', () => {
+    const r = transpileEmlToCpp(FLOAT_MULTIPLICATION);
+    expect(r.ok, JSON.stringify(r.diagnostics)).toBe(true);
+    expect(r.cpp).toContain('a * (b * c)');
+  });
 });
 
 const toolchain = findToolchain();
@@ -122,4 +137,30 @@ describe.skipIf(!toolchain)('EMLP-AUDIT-024 — real C++20 behavior', () => {
     },
     120_000,
   );
+});
+
+/**
+ * Independent post-fix V from EMLP-RELAY-0058.
+ * Board id: 891fd4ed-2cbd-4fd2-a2f7-8c2edc655c6a
+ * Candidate: 82b42271fe637152ee5d98c14ec0a030db5d0dc3
+ * C++ emitter blob: a4a6c5289affb58fa901a3978235b2c5d7651d87
+ * Exact-input overlap with the fixer: 0/2.
+ *
+ * Real MSVC produced 0 for both pre-fix emissions and 1 for both v4
+ * emissions, matching interpreter and CPython only after the fix.
+ */
+describe.skipIf(!toolchain)('unresolved V from EMLP-RELAY-0058 — real C++20 behavior', () => {
+  it.each([
+    ['equality nested on comparison right', RIGHT_COMPARISON],
+    ['different floating multiplication grouping', FLOAT_MULTIPLICATION],
+  ])('%s computes the interpreter value', async (_label, src) => {
+    const ir = interpret(src);
+    expect(ir.error, JSON.stringify(ir.error)).toBeUndefined();
+    expect(ir.output).toBe('1\n');
+    const tr = transpileEmlToCpp(src);
+    expect(tr.ok, JSON.stringify(tr.diagnostics)).toBe(true);
+    const run = await compileAndRun(toolchain!, tr.cpp);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout.replace(/\r\n/g, '\n')).toBe(ir.output);
+  }, 120_000);
 });

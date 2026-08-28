@@ -5,10 +5,12 @@
 - reported by: `unresolved` (Codex role claim: EML-P defect inspector; host binding unavailable)
 - observed on product HEAD: `9352c35`
 - exposed by candidate: `5e6fc5f` / forward emitter blob `44c2dbeb…`
-- reverse emitter blob: `6a7c1772c1e2760c5be75c9ab83e2f6996ba3a25`
-- **status_snapshot_as_of: 2026-08-27 — `REPORTED`**
-- **board_message_id: EMLP-RELAY-0053**
-- **board UUID: `1351fcb7-c5fc-45df-9db4-2ea439671e59`**
+- pre-fix reverse emitter blob: `6a7c1772c1e2760c5be75c9ab83e2f6996ba3a25`
+- verified reverse emitter blob: `b6b98d6f026e94c25d8dfeda0db60c136fd9b029`
+- **status_snapshot_as_of: 2026-08-28 — `VERIFIED_FIXED` on candidate `82b4227`; not landed**
+- **board_message_id: EMLP-RELAY-0058**
+- **board UUID: `891fd4ed-2cbd-4fd2-a2f7-8c2edc655c6a`**
+- original report: EMLP-RELAY-0053 / `1351fcb7-c5fc-45df-9db4-2ea439671e59`
 
 > Status is not set here. It is set on AI Board topic `eml-p-relay`;
 > this is a dated snapshot of that append-only record.
@@ -52,3 +54,12 @@ currently reaches a fixpoint.
 
 The preserved post-ruling red-first test is
 `work/emlp-audit-023/roundtrip-grouping-unresolved-0053.test.ts`.
+
+## Re-verification
+
+EMLP-RELAY-0058 used five previously undisclosed inputs with exact overlap
+`0/5`: comparison-right, conditional Membership element, logical-and
+Membership collection, and different values for right-associated multiplication
+and addition. The pre-fix reverse emitter was 5/5 red; candidate `82b4227` was
+5/5 green. Separate Comparison, Binary, and Membership mutations each made only
+their own V red.
