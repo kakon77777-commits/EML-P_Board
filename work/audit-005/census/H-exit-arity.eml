@@ -1,0 +1,11 @@
+class M:
+    def __enter__(self):
+        return 1
+    def __exit__(self, a):
+        return 0
+
+try:
+    with M() as m:
+        "IN"^0
+except TypeError:
+    "TypeError"^0

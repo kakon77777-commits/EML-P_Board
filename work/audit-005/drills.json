@@ -1,0 +1,115 @@
+{
+  "control": {
+    "passed": 20,
+    "failed": 0,
+    "mechanism": 8,
+    "probes": 8
+  },
+  "pristine_sha256": "d7df9a8cd1186ccc7c36c7cc41c066d0214be9147303593b9a2ca522b93e416d",
+  "restored_sha256": "d7df9a8cd1186ccc7c36c7cc41c066d0214be9147303593b9a2ca522b93e416d",
+  "drills": [
+    {
+      "id": "D1",
+      "restores": "620 unguarded — the plain function frame counts nothing",
+      "failed": 10,
+      "passed": 10,
+      "failing": [
+        "plain def, one arg missing  [620]",
+        "plain def, one arg surplus  [620]",
+        "plain def, two of three missing  [620]",
+        "@cold def, one arg surplus  [620]",
+        "every row above raises before the body runs, not after",
+        "records no call for a wrong-arity call, because none happened",
+        "message matches CPython — plain missing",
+        "message matches CPython — plain surplus",
+        "message matches CPython — plural + Oxford comma",
+        "message matches CPython — two names join with and"
+      ],
+      "mechanism": 4
+    },
+    {
+      "id": "D2",
+      "restores": "705 unguarded — runMethodBody counts nothing (methods, __init__, __exit__)",
+      "failed": 7,
+      "passed": 13,
+      "failing": [
+        "method, one arg missing  [705]",
+        "method, one arg surplus  [705]",
+        "__init__, one arg missing  [705 via 666]",
+        "__init__, two args surplus  [705 via 666]",
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — method missing is qualified",
+        "message matches CPython — __init__ is qualified and counts self"
+      ],
+      "mechanism": 4
+    },
+    {
+      "id": "D3",
+      "restores": "620 detects MISSING only — a surplus argument is still dropped",
+      "failed": 5,
+      "passed": 15,
+      "failing": [
+        "plain def, one arg surplus  [620]",
+        "@cold def, one arg surplus  [620]",
+        "every row above raises before the body runs, not after",
+        "records no call for a wrong-arity call, because none happened",
+        "message matches CPython — plain surplus"
+      ],
+      "mechanism": 6
+    },
+    {
+      "id": "D4",
+      "restores": "620 detects SURPLUS only — a missing argument is still bound to None",
+      "failed": 5,
+      "passed": 15,
+      "failing": [
+        "plain def, one arg missing  [620]",
+        "plain def, two of three missing  [620]",
+        "message matches CPython — plain missing",
+        "message matches CPython — plural + Oxford comma",
+        "message matches CPython — two names join with and"
+      ],
+      "mechanism": 6
+    },
+    {
+      "id": "D5",
+      "restores": "705 stops counting the bound self — right rejection, wrong numbers",
+      "failed": 2,
+      "passed": 18,
+      "failing": [
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — __init__ is qualified and counts self"
+      ],
+      "mechanism": 8
+    },
+    {
+      "id": "D6",
+      "restores": "620 guard moved BELOW eml:call — right answer, and the trace records a call that never happened",
+      "failed": 1,
+      "passed": 19,
+      "failing": [
+        "records no call for a wrong-arity call, because none happened"
+      ],
+      "mechanism": 8
+    },
+    {
+      "id": "D7",
+      "restores": "620 guard moved BELOW the body — right answer, after the side effects",
+      "failed": 10,
+      "passed": 10,
+      "failing": [
+        "plain def, one arg missing  [620]",
+        "plain def, one arg surplus  [620]",
+        "plain def, two of three missing  [620]",
+        "@cold def, one arg surplus  [620]",
+        "every row above raises before the body runs, not after",
+        "records no call for a wrong-arity call, because none happened",
+        "message matches CPython — plain missing",
+        "message matches CPython — plain surplus",
+        "message matches CPython — plural + Oxford comma",
+        "message matches CPython — two names join with and"
+      ],
+      "mechanism": 4
+    }
+  ]
+}

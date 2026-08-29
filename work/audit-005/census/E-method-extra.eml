@@ -1,0 +1,9 @@
+class C:
+    def m(self, y):
+        return y
+
+C() => c
+try:
+    str(c.m(1, 2))^0
+except TypeError:
+    "TypeError"^0

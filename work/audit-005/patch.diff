@@ -1,0 +1,119 @@
+diff --git a/packages/interp/src/index.ts b/packages/interp/src/index.ts
+index 3685095..f8f61a8 100644
+--- a/packages/interp/src/index.ts
++++ b/packages/interp/src/index.ts
+@@ -160,6 +160,54 @@ export function interpretProgram(program: Program, opts: InterpOptions = {}): In
+   return runProgram(program, emitter, opts, []);
+ }
+ 
++/**
++ * CPython's positional-arity TypeError, message and all, or `undefined` when
++ * the count is right.
++ *
++ * Five details below were measured against CPython 3.14 rather than recalled,
++ * and each is a way the obvious string is wrong: the count and the noun
++ * pluralise independently; two missing names join with `and` while three or
++ * more take an Oxford comma; a method is named `Class.method`; and a method's
++ * two counts INCLUDE the bound `self` the caller never wrote, so
++ * `C().m(1, 2)` against `def m(self, y)` reports 2 taken and 3 given.
++ *
++ * An exact length comparison is safe here because EML parameters are plain
++ * identifiers — the grammar parses `params` as `Identifier[]` with no default
++ * values, no `*args` and no `**kwargs` — so there is no legal call shape whose
++ * argument count may differ from its parameter count.
++ */
++function arityError(
++  label: string,
++  params: FunctionDef['params'],
++  argc: number,
++  boundSelf: number,
++): PyError | undefined {
++  if (argc === params.length) return undefined;
++  if (argc < params.length) {
++    const missing = params.slice(argc).map((p) => `'${p.name}'`);
++    const names =
++      missing.length === 1
++        ? missing[0]!
++        : missing.length === 2
++          ? `${missing[0]} and ${missing[1]}`
++          : `${missing.slice(0, -1).join(', ')}, and ${missing[missing.length - 1]}`;
++    return new PyError(
++      'TypeError',
++      `${label}() missing ${missing.length} required positional argument${
++        missing.length === 1 ? '' : 's'
++      }: ${names}`,
++    );
++  }
++  const takes = params.length + boundSelf;
++  const given = argc + boundSelf;
++  return new PyError(
++    'TypeError',
++    `${label}() takes ${takes} positional argument${takes === 1 ? '' : 's'} but ${given} ${
++      given === 1 ? 'was' : 'were'
++    } given`,
++  );
++}
++
+ function runProgram(
+   program: Program,
+   emitter: Emitter,
+@@ -570,6 +618,14 @@ function runProgram(
+     const fn = callee.def as FunctionDef;
+     if (fn.isAsync) throw new Unsupported('async function', `'${name}' is async (temporal runtime only)`);
+ 
++    // Before the @cold cache and before `eml:call`: CPython rejects the arity
++    // in the call machinery, so the body is never entered, no cache entry is
++    // consulted or created, and no call is recorded. Checking after any of
++    // those would leave a wrong-arity call visible in the trace as one that
++    // happened.
++    const arity = arityError(name, fn.params, args.length, 0);
++    if (arity) throw arity;
++
+     // @cold non-async functions are emitted with @functools.cache; emulate it so
+     // the trace (and any side effects like prints) match Python exactly: a cache
+     // hit does NOT re-run the body.
+@@ -692,15 +748,21 @@ function runProgram(
+    * reference that function's locals is not modeled faithfully this round.
+    */
+   const runMethodBody = (instance: Extract<PyVal, { k: 'instance' }>, method: FunctionDef, args: PyVal[]): PyVal => {
++    const qualifiedName = `${instance.className}.${method.name}`;
++    const [selfParam, ...restParams] = method.params;
++    // Same reason as the plain-function site, and one more: this frame is also
++    // how `__init__`, `__enter__` and `__exit__` are invoked, so the check has
++    // to sit above the depth counter rather than inside any one caller.
++    const arity = arityError(qualifiedName, restParams, args.length, selfParam ? 1 : 0);
++    if (arity) throw arity;
++
+     if (++depth > RECURSION_LIMIT) {
+       depth--;
+       throw new PyError('RecursionError', 'maximum recursion depth exceeded');
+     }
+     tick();
+-    const qualifiedName = `${instance.className}.${method.name}`;
+     emitter.emit('eml:call', { fn: qualifiedName, args: args.map(pyRepr), temperature: 'neutral' });
+     const local: Scope = { vars: new Map(), parent: module, locals: localNames(method.body) };
+-    const [selfParam, ...restParams] = method.params;
+     if (selfParam) local.vars.set(selfParam.name, instance);
+     restParams.forEach((p, i) => local.vars.set(p.name, args[i] ?? NONE));
+     let result: PyVal = NONE;
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index eb2c70a..7e724e3 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -253,6 +253,16 @@ const SEMANTIC_FILES = [
+       // parameter-passing cases: parameter binding is a different code path,
+       // and the two can be wrong independently.
+       'tests/aliasing-visibility.test.ts',
++      // Added 2026-08-29 (EMLP-AUDIT-005). Every test above calls user
++      // functions with the RIGHT number of arguments, because that is what a
++      // test author writes, so none of them could see that the count was never
++      // checked: a missing argument was bound to None and a surplus one was
++      // dropped, and the call then succeeded with a plausible wrong value.
++      // The entry above ends by noting that parameter binding is its own code
++      // path and can be wrong independently — it was, in two places at once.
++      // Deleting either arity check diverges 4 of 8 rows here against real
++      // CPython; before this entry existed, deleting both diverged nothing.
++      'tests/user-function-arity.test.ts',
+     ],
+   ],
+   [

@@ -1,0 +1,9 @@
+class C:
+    def m(self):
+        return 1
+
+try:
+    C(1, 2) => c
+    "NO ERROR"^0
+except TypeError:
+    "TypeError"^0

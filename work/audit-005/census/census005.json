@@ -1,0 +1,74 @@
+[
+  {
+    "id": "A-plain-missing",
+    "site": "620",
+    "exercises": "def f(x); called with 0 args",
+    "verdict": "DIVERGE",
+    "interp": "'None\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "B-plain-extra",
+    "site": "620",
+    "exercises": "def f(x); called with 2 args",
+    "verdict": "DIVERGE",
+    "interp": "'1\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "C-cold-extra",
+    "site": "620",
+    "exercises": "@cold def f(x); called with 2 args",
+    "verdict": "DIVERGE",
+    "interp": "'1\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "D-method-missing",
+    "site": "705",
+    "exercises": "instance.m(y) called with 0 args",
+    "verdict": "DIVERGE",
+    "interp": "'None\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "E-method-extra",
+    "site": "705",
+    "exercises": "instance.m(y) called with 2 args",
+    "verdict": "DIVERGE",
+    "interp": "'1\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "F-init-missing",
+    "site": "705 via 666",
+    "exercises": "__init__(self, x); constructed with 0 args",
+    "verdict": "DIVERGE",
+    "interp": "'None\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "G-init-extra",
+    "site": "705 via 666",
+    "exercises": "__init__(self, x); constructed with 3 args",
+    "verdict": "DIVERGE",
+    "interp": "'1\\n'",
+    "cpython": "'TypeError\\n'"
+  },
+  {
+    "id": "H-exit-arity",
+    "site": "705 via 1017",
+    "exercises": "__exit__ declaring 1 param, invoked with 3",
+    "verdict": "DIVERGE",
+    "interp": "'IN\\n'",
+    "cpython": "'IN\\nTypeError\\n'"
+  },
+  {
+    "id": "CONTROL-noinit-extra",
+    "site": "668",
+    "exercises": "class with NO __init__, constructed with args - the interpreter's one working arity check; this cell MUST come back AGREE",
+    "verdict": "AGREE",
+    "interp": "'TypeError\\n'",
+    "cpython": "'TypeError\\n'"
+  }
+]

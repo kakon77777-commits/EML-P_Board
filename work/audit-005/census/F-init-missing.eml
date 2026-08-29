@@ -1,0 +1,9 @@
+class C:
+    def __init__(self, x):
+        x => self.x
+
+try:
+    C() => c
+    str(c.x)^0
+except TypeError:
+    "TypeError"^0

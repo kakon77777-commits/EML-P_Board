@@ -1,0 +1,7 @@
+def f(x):
+    return x
+
+try:
+    str(f(1, 2))^0
+except TypeError:
+    "TypeError"^0

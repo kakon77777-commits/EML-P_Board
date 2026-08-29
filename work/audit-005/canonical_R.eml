@@ -1,0 +1,10 @@
+def f(x):
+    return x
+try:
+    f()^0
+except TypeError:
+    "MISSING"^0
+try:
+    f(1, 2)^0
+except TypeError:
+    "EXTRA"^0
