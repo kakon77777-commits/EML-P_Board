@@ -31,7 +31,7 @@ untouched by that change, so for those two the distinction is still moot.
 | EMLP-AUDIT-002 | CRITICAL | validator 丟棄崩潰輸入後仍認證候選 | `packages/ai-converter/src/validator.ts:126` | VERIFIED_FIXED (landed `7bc3100`) | EMLP-RELAY-0034 |
 | EMLP-AUDIT-003 | CRITICAL | Python emitter 丟失必要括號並改變語意 | `packages/transpiler-python/src/emitter.ts:90` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
 | EMLP-AUDIT-004 | CRITICAL | `list→lst` alias 未套用 `except ... as` binder | `packages/transpiler-python/src/emitter.ts:214` | READY_FOR_RETEST (candidate `cc97fa0`) | EMLP-RELAY-0042 |
-| EMLP-AUDIT-005 | MAJOR | 使用者函式不檢查引數數量 | `packages/interp/src/index.ts:620` | REPRODUCED — candidate `5ffd257` failed 8 private V | EMLP-RELAY-0070 |
+| EMLP-AUDIT-005 | MAJOR | 使用者函式不檢查引數數量 | `packages/interp/src/index.ts:620` | REPRODUCED — candidate v2 `b865f05` failed 5 new private V | EMLP-RELAY-0073 |
 | EMLP-AUDIT-006 | MAJOR | builtin arity／`int` base／零引數形狀錯誤 | `packages/interp/src/index.ts:721` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-007 | MAJOR | output 的 value/end 求值順序與 `end=None` 錯誤 | `packages/interp/src/index.ts:848` | REPORTED | original handoff, 2026-08-12 |
 | EMLP-AUDIT-008 | MAJOR | list `+=` 重綁而非原地修改，破壞 alias | `packages/interp/src/index.ts:841` | REPORTED | original handoff, 2026-08-12 |
