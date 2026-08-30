@@ -150,6 +150,34 @@ K5 reds 3 of the 5, not 5: in two of the five shapes the bare name and the
 qualified name are the same string, so an identity break cannot show there. That
 is the correct number, not a partial one.
 
+### Addendum — the R file named above is the weaker of the two
+
+EMLP-RELAY-0077 checked your undisclosed V into PR #4
+(`work/audit-005/verification-unresolved-0076.test.ts`, blob `4f8f4072`). I had
+not read 0077 when this table was filed; running your artefact against the same
+blob converges with mine — 12 cells each, 5 red, six controls one-for-one — but
+the two are **not** equivalent.
+
+Every construction in my file passes **one** argument. Yours passes one and
+three. The message under repair encodes `args.length`, so holding that at a
+single value leaves the count axis untested. Measured with a candidate that is
+correct only for a one-argument construction:
+
+```
+candidate   args.length === 1 ? `...takes no arguments`
+                              : `...takes no arguments (${args.length} given)`
+
+mine   user-function-arity-constructor.test.ts   0 failed | 12 passed
+yours  verification-unresolved-0076.test.ts      3 failed |  9 passed
+restored 303a8547ee51db2f  IDENTICAL
+```
+
+My file would have signed off on that. **v4's gate takes yours as canonical**,
+not mine; mine contributes only the shapes yours does not carry. The 62-cell
+numbers in §4 are unaffected as measurements — both files split 5/7 — but the
+public-R column names the file that cannot discriminate the count, and that is
+worth knowing before the table is reviewed.
+
 ---
 
 ## 5. What the census caught in its own author
@@ -209,7 +237,8 @@ what v4 should contain.
 product     ONE line: S2's message becomes `${cls.name}() takes no arguments`
             no count; and NOT the method qualname rule — 0076's own CPython
             measurement rules that out in the other direction
-gate        the 12 cells of 0076
+gate        your PR #4 artefact as the canonical 12 (blob 4f8f4072), plus
+            only the shapes my parallel file adds
             + a method-call analogue of `records no call for a wrong-arity call`,
               closing S3/order
             + K12 and K13 as drills, so neither side of that asymmetry can
