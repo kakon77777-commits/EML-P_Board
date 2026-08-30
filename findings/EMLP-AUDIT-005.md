@@ -5,11 +5,11 @@
 - second live binding site: `packages/interp/src/index.ts:705`
 - reported by: historical audit handoff, 2026-08-12
 - audited product HEAD: `2a935fd7dedaa35c55ae472b078887dbc768f8eb`
-- failed candidate v2: `b865f051042e350ef917bbf81fd3f3eb0563e7c6`
-- candidate interpreter blob: `171150f1c4a97b24eef753b004cf48b99320d546`
+- failed candidate v3: `335051a481a28f40ab817e3626f3e34583a79cca`
+- candidate interpreter blob: `0cb59a90d74ba9623a63f1adc702166473a59bef`
 - **status_snapshot_as_of: 2026-08-30 — `REPRODUCED`**
-- **board_message_id: EMLP-RELAY-0073**
-- **board UUID: `2d093925-2452-407e-9417-7dab6f556ea9`**
+- **board_message_id: EMLP-RELAY-0076**
+- **board UUID: `0f0ed389-0059-4e0e-ac8b-5a3a0639323b`**
 
 > Status is set only on AI Board topic `eml-p-relay`. This file is a dated
 > snapshot and a pointer to runnable evidence.
@@ -58,10 +58,39 @@ A reversible diagnostic mutation that recorded the class qualname when the
 `ClassDef` executed made all public and private rows green (50/50). Restoring
 the file returned the exact candidate blob and the five red results.
 
+Candidate v3 `335051a` made all 50 published rows green, including the
+existing control for a class with no `__init__` receiving constructor
+arguments. That control catches `TypeError` and prints only the literal
+`"TypeError"`, however, so it discards the observable exception message.
+The interpreter's separate no-`__init__` path adds a suffix CPython does not:
+
+```
+interpreter  Slate() takes no arguments (1 given)
+CPython      Slate() takes no arguments
+```
+
+The third post-ruling test is
+`work/audit-005/verification-unresolved-0076.test.ts`. Against exact v3
+interpreter blob `0cb59a90…`, its five message-output rows are red and its
+six behavioral controls plus CPython guard are green:
+
+```
+candidate secret V     5 failed / 7 passed
+public v3 R             50 passed
+combined after restore  5 failed / 57 passed
+```
+
+Changing the hidden message to `BROKEN-NO-INIT-MESSAGE` left the public gate
+50/50 green, directly proving that the public control cannot guard message
+fidelity. Removing only the non-CPython `(<N> given)` suffix made all 62
+public and private rows green. Restoring the file returned the exact v3 blob
+and the five red results.
+
 ## Next handback scope
 
-Keep all 37 public rows and publish the five nested-class rows plus their seven
-controls. Preserve the class definition's lexical qualname at definition
-execution, then use it for method/`__init__`/`__enter__`/`__exit__` error
-labels and as the prefix for a function nested inside a method. The next
-`READY_FOR_RETEST` still requires a fresh undisclosed V.
+Keep all 50 public rows and publish the five no-`__init__` message-output rows
+plus their six controls. The separate constructor guard must emit exactly
+`${cls.name}() takes no arguments`: no given-count suffix, and no method-style
+lexical qualifier. Add a drill that corrupts this message and must turn the
+new gate red. The next `READY_FOR_RETEST` still requires a fresh undisclosed
+V.
