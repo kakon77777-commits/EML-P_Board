@@ -1,34 +1,50 @@
 {
   "control": {
     "failed": 0,
-    "passed": 50
+    "passed": 37
   },
-  "pristine_sha256": "692bd54184a74908891def4ffa14100f887abffc3e66803061c96b79b4bacc42",
-  "restored_sha256": "692bd54184a74908891def4ffa14100f887abffc3e66803061c96b79b4bacc42",
+  "pristine_sha256": "d8bbc6d2789fa8aeb75e7373cdfa05a08e2311b169e854502228bd41a70569f2",
+  "restored_sha256": "d8bbc6d2789fa8aeb75e7373cdfa05a08e2311b169e854502228bd41a70569f2",
   "post_restore": {
     "failed": 0,
-    "passed": 50
+    "passed": 37
   },
   "drills": [
     {
       "id": "D1",
       "restores": "the receiver is not counted (v1's `selfParam ? 1 : 0` shape)",
-      "failed": -1,
-      "passed": -1,
-      "failing": []
+      "failed": 7,
+      "passed": 30,
+      "failing": [
+        "V1 zero-param method, bound call",
+        "V2 zero-param __init__",
+        "V3 zero-param __enter__",
+        "V1 message names the class and counts the receiver",
+        "V5 message counts receiver plus the explicit argument",
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — __init__ is qualified and counts self"
+      ]
     },
     {
       "id": "D2",
       "restores": "the receiver is counted but compared against the params after it",
-      "failed": -1,
-      "passed": -1,
-      "failing": []
+      "failed": 7,
+      "passed": 30,
+      "failing": [
+        "V4 zero-param __exit__, protocol passes three",
+        "a receiver parameter not named self still binds and counts",
+        "method, one arg missing  [705]",
+        "__init__, one arg missing  [705 via 666]",
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — method missing is qualified",
+        "message matches CPython — __init__ is qualified and counts self"
+      ]
     },
     {
       "id": "D3",
       "restores": "the plain-function frame is unguarded",
-      "failed": 23,
-      "passed": 27,
+      "failed": 17,
+      "passed": 20,
       "failing": [
         "V6 function called through an alias",
         "V7 nested function",
@@ -37,12 +53,6 @@
         "V8 control — the same call without @cold IS an arity error",
         "@hot with a missing argument takes the ordinary TypeError path",
         "a surplus argument is evaluated and the body is not",
-        "R — function nested inside a nested-class method",
-        "plain function, two-hop alias",
-        "nested function, two-hop alias",
-        "@cold through an alias with hashable surplus args uses the definition name",
-        "function nested inside a TOP-LEVEL class method",
-        "three-level nested function",
         "plain def, one arg missing  [620]",
         "plain def, one arg surplus  [620]",
         "plain def, two of three missing  [620]",
@@ -58,12 +68,11 @@
     {
       "id": "D4",
       "restores": "the plain frame detects MISSING only",
-      "failed": 8,
-      "passed": 42,
+      "failed": 7,
+      "passed": 30,
       "failing": [
         "V8 control — the same call without @cold IS an arity error",
         "a surplus argument is evaluated and the body is not",
-        "@cold through an alias with hashable surplus args uses the definition name",
         "plain def, one arg surplus  [620]",
         "@cold def, one arg surplus  [620]",
         "every row above raises before the body runs, not after",
@@ -74,19 +83,14 @@
     {
       "id": "D5",
       "restores": "the plain frame detects SURPLUS only",
-      "failed": 15,
-      "passed": 35,
+      "failed": 10,
+      "passed": 27,
       "failing": [
         "V6 function called through an alias",
         "V7 nested function",
         "V6 message names the function that was defined, not the alias",
         "V7 message qualifies a nested function",
         "@hot with a missing argument takes the ordinary TypeError path",
-        "R — function nested inside a nested-class method",
-        "plain function, two-hop alias",
-        "nested function, two-hop alias",
-        "function nested inside a TOP-LEVEL class method",
-        "three-level nested function",
         "plain def, one arg missing  [620]",
         "plain def, two of three missing  [620]",
         "message matches CPython — plain missing",
@@ -97,41 +101,29 @@
     {
       "id": "D6",
       "restores": "the label comes from the call site rather than the function object",
-      "failed": 8,
-      "passed": 42,
+      "failed": 2,
+      "passed": 35,
       "failing": [
         "V6 message names the function that was defined, not the alias",
-        "V7 message qualifies a nested function",
-        "R — function nested inside a nested-class method",
-        "plain function, two-hop alias",
-        "nested function, two-hop alias",
-        "@cold through an alias with hashable surplus args uses the definition name",
-        "function nested inside a TOP-LEVEL class method",
-        "three-level nested function"
+        "V7 message qualifies a nested function"
       ]
     },
     {
       "id": "D7",
       "restores": "a nested function is not qualified",
-      "failed": 6,
-      "passed": 44,
+      "failed": 1,
+      "passed": 36,
       "failing": [
-        "V7 message qualifies a nested function",
-        "R — function nested inside a nested-class method",
-        "R — class nested below two functions",
-        "nested function, two-hop alias",
-        "function nested inside a TOP-LEVEL class method",
-        "three-level nested function"
+        "V7 message qualifies a nested function"
       ]
     },
     {
       "id": "D8",
       "restores": "the @cold guard moves back above the cache (the v1 regression)",
-      "failed": 2,
-      "passed": 48,
+      "failed": 1,
+      "passed": 36,
       "failing": [
-        "V8 @cold hashes its arguments before the arity is checked",
-        "@cold surplus with an unhashable argument hashes first"
+        "V8 @cold hashes its arguments before the arity is checked"
       ]
     }
   ]
