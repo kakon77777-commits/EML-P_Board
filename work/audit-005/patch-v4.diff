@@ -1,0 +1,1147 @@
+diff --git a/packages/interp/src/index.ts b/packages/interp/src/index.ts
+index 3685095..c21d596 100644
+--- a/packages/interp/src/index.ts
++++ b/packages/interp/src/index.ts
+@@ -160,6 +160,58 @@ export function interpretProgram(program: Program, opts: InterpOptions = {}): In
+   return runProgram(program, emitter, opts, []);
+ }
+ 
++/**
++ * CPython's positional-arity TypeError, message and all, or `undefined` when
++ * the count is right.
++ *
++ * `given` is the number of arguments the call actually delivers, which for a
++ * bound method INCLUDES the receiver the caller never wrote, and `params` is
++ * every declared parameter including the receiver. v1 of this fix instead
++ * passed the receiver separately and derived whether there was one from
++ * `selfParam ? 1 : 0` — from whether the method DECLARED a first parameter.
++ * A bound call always passes the instance, so a method declaring none is
++ * exactly the case that should report 0 taken and 1 given, and v1 reported no
++ * error at all; the same slip undercounted every method message by one.
++ *
++ * Five message details were measured against CPython 3.14 rather than
++ * recalled: the count and the noun pluralise independently; two missing names
++ * join with `and` while three or more take an Oxford comma; the label is the
++ * function's own qualified name; and a method's counts include the receiver.
++ *
++ * An exact length comparison is safe because EML parameters are plain
++ * identifiers — the grammar parses `params` as `Identifier[]` with no
++ * defaults, no `*args` and no `**kwargs` — so no legal call shape can have a
++ * count that differs from its parameter list.
++ */
++function arityError(
++  label: string,
++  params: FunctionDef['params'],
++  given: number,
++): PyError | undefined {
++  if (given === params.length) return undefined;
++  if (given < params.length) {
++    const missing = params.slice(given).map((p) => `'${p.name}'`);
++    const names =
++      missing.length === 1
++        ? missing[0]!
++        : missing.length === 2
++          ? `${missing[0]} and ${missing[1]}`
++          : `${missing.slice(0, -1).join(', ')}, and ${missing[missing.length - 1]}`;
++    return new PyError(
++      'TypeError',
++      `${label}() missing ${missing.length} required positional argument${
++        missing.length === 1 ? '' : 's'
++      }: ${names}`,
++    );
++  }
++  return new PyError(
++    'TypeError',
++    `${label}() takes ${params.length} positional argument${params.length === 1 ? '' : 's'} but ${given} ${
++      given === 1 ? 'was' : 'were'
++    } given`,
++  );
++}
++
+ function runProgram(
+   program: Program,
+   emitter: Emitter,
+@@ -185,6 +237,42 @@ function runProgram(
+   for (const name of BUILTIN_EXCEPTIONS) module.vars.set(name, EXC_CLASS(name));
+   /** functools.cache emulation for @cold (non-async) functions, keyed by repr(args). */
+   const coldCache = new Map<string, PyVal>();
++
++  /**
++   * FunctionDef node -> the qualified name CPython would put in an error.
++   *
++   * Filled where the `def` EXECUTES, because that is the only moment the
++   * enclosing function is known: `outer.<locals>.inner` is a fact about where
++   * the definition ran, not about where the call happens. Keyed by the AST node
++   * so re-entering `outer` recomputes the same string, and so no new field has
++   * to be added to the func value in values.ts.
++   *
++   * v1 of this fix used the CALL-SITE identifier instead, which is wrong twice
++   * over: `original => alias; alias()` reported `alias()` where CPython reports
++   * `original()`, and a nested function reported `inner()` where CPython
++   * reports `outer.<locals>.inner()`. Both were published as matching CPython
++   * exactly, on the strength of seven message rows that were all top-level
++   * direct calls.
++   */
++  const qualnames = new Map<FunctionDef, string>();
++  /**
++   * ClassDef node -> its qualified name, recorded the same way and for the
++   * same reason.
++   *
++   * v2 recorded a qualifier only where a `def` executes. A class body's
++   * methods never reach that branch — `ClassDef` binds the class and the
++   * method nodes are looked up later — so `instance.className` stayed the
++   * bare `cls.name` and a nested class lost its enclosing `<locals>` prefix
++   * permanently, taking every function defined inside its methods with it.
++   *
++   * Which is the same shape v1 and v2 were each caught by, one level out: a
++   * fact recorded where ONE kind of definition executes, and a second kind
++   * that never passes through there. v1 read identity off the call site, v2
++   * off the `def`; it has to come from whichever definition actually ran.
++   */
++  const classQualnames = new Map<ClassDef, string>();
++  /** Enclosing function qualnames, innermost last, while a body is running. */
++  const qualStack: string[] = [];
+   let steps = 0;
+   let depth = 0;
+   let error: InterpResult['error'];
+@@ -570,6 +658,24 @@ function runProgram(
+     const fn = callee.def as FunctionDef;
+     if (fn.isAsync) throw new Unsupported('async function', `'${name}' is async (temporal runtime only)`);
+ 
++    // The label is the function's own qualified name, not the identifier this
++    // call site used — see `qualnames` above.
++    const arity = arityError(qualnames.get(fn) ?? callee.name, fn.params, args.length);
++    // WHERE this is raised depends on @cold, and v1 had it backwards.
++    //
++    // v1 threw here, above the cache, with a comment asserting that CPython
++    // rejects the arity in the call machinery before any cache is consulted.
++    // Measured against CPython 3.14: `@cache def f(x)` called `f(1, [2])`
++    // raises `unhashable type: 'list'`, because functools builds its key from
++    // the arguments FIRST and the wrapped function's signature is only reached
++    // on the miss after it. The same function undecorated raises the arity
++    // error. v1 turned the first into the second — a defect the baseline did
++    // not have, which is why it was caught as a regression rather than a miss.
++    //
++    // So an undecorated or @hot function rejects here, above `eml:call` and
++    // above the body; a @cold one hashes first and rejects below.
++    if (arity && fn.temperature !== 'cold') throw arity;
++
+     // @cold non-async functions are emitted with @functools.cache; emulate it so
+     // the trace (and any side effects like prints) match Python exactly: a cache
+     // hit does NOT re-run the body.
+@@ -599,6 +705,11 @@ function runProgram(
+         emitter.emit('eml:cache:hit', { fn: name, args: args.map(pyRepr), result: pyRepr(cached) });
+         return cached;
+       }
++      // The @cold arity rejection, in functools' order: the key was built (so
++      // an unhashable argument has already raised above) and the lookup missed,
++      // which is the point at which the wrapper calls through to the function
++      // and its signature is checked. Still above `eml:call` and the body.
++      if (arity) throw arity;
+     }
+ 
+     if (++depth > RECURSION_LIMIT) {
+@@ -620,10 +731,15 @@ function runProgram(
+     fn.params.forEach((p, i) => local.vars.set(p.name, args[i] ?? NONE));
+     let result: PyVal = NONE;
+     try {
++      qualStack.push(qualnames.get(fn) ?? callee.name);
+       for (const s of fn.body) execStmt(s, local);
++      qualStack.pop();
+     } catch (e) {
+-      if (e instanceof ReturnSignal) result = e.value;
+-      else {
++      if (e instanceof ReturnSignal) {
++        result = e.value;
++        qualStack.pop();
++      } else {
++        qualStack.pop();
+         depth--;
+         throw e;
+       }
+@@ -665,7 +781,18 @@ function runProgram(
+     if (init) {
+       runMethodBody(instance, init, args);
+     } else if (args.length > 0) {
+-      throw new PyError('TypeError', `${cls.name}() takes no arguments (${args.length} given)`);
++      // CPython's default `object.__init__` reports no count here and no
++      // lexical qualifier, even when the class is nested two functions deep:
++      //     Slate() takes no arguments
++      // That is a DIFFERENT rule from the one `__init__` follows a few lines
++      // above, where the same nested class reports
++      //     mk.<locals>.S.__init__() missing 1 required positional argument: 'x'
++      // so this branch must not reach for `classQualnames`, and must not go
++      // through `arityError` — measured against CPython 3.14 in both
++      // directions. This is the one arity site that does not share the
++      // composer, which is why every message row written against the
++      // composer covered three of the four deciding sites and missed this.
++      throw new PyError('TypeError', `${cls.name}() takes no arguments`);
+     }
+     return instance;
+   };
+@@ -692,12 +819,30 @@ function runProgram(
+    * reference that function's locals is not modeled faithfully this round.
+    */
+   const runMethodBody = (instance: Extract<PyVal, { k: 'instance' }>, method: FunctionDef, args: PyVal[]): PyVal => {
++    // A bound call always delivers the instance, whether or not the method
++    // declared a parameter to receive it, so `given` counts it and `params` is
++    // every declared parameter including the receiver. v1 asked instead whether
++    // a first parameter was DECLARED, which made a zero-parameter method the
++    // one shape it could not reject and undercounted every message by one.
++    // This frame is also how __init__, __enter__ and __exit__ are invoked, so
++    // all four are covered by the single comparison.
++    // ONE string, computed once, used by the arity label and by everything
++    // below. The first attempt at this fix changed only the `qualifiedName`
++    // further down — which feeds eml:call, eml:return and qualStack — while the
++    // guard here went on building its own label from the bare class name, so
++    // four of the five rows stayed red and the fifth passed for a reason that
++    // had nothing to do with the label being right.
++    const owner = classQualnames.get(instance.classDef as ClassDef) ?? instance.className;
++    const qualifiedName = `${owner}.${method.name}`;
++    {
++      const arity = arityError(qualifiedName, method.params, args.length + 1);
++      if (arity) throw arity;
++    }
+     if (++depth > RECURSION_LIMIT) {
+       depth--;
+       throw new PyError('RecursionError', 'maximum recursion depth exceeded');
+     }
+     tick();
+-    const qualifiedName = `${instance.className}.${method.name}`;
+     emitter.emit('eml:call', { fn: qualifiedName, args: args.map(pyRepr), temperature: 'neutral' });
+     const local: Scope = { vars: new Map(), parent: module, locals: localNames(method.body) };
+     const [selfParam, ...restParams] = method.params;
+@@ -705,10 +850,15 @@ function runProgram(
+     restParams.forEach((p, i) => local.vars.set(p.name, args[i] ?? NONE));
+     let result: PyVal = NONE;
+     try {
++      qualStack.push(qualifiedName);
+       for (const s of method.body) execStmt(s, local);
++      qualStack.pop();
+     } catch (e) {
+-      if (e instanceof ReturnSignal) result = e.value;
+-      else {
++      if (e instanceof ReturnSignal) {
++        result = e.value;
++        qualStack.pop();
++      } else {
++        qualStack.pop();
+         depth--;
+         throw e;
+       }
+@@ -824,6 +974,10 @@ function runProgram(
+       case 'FunctionDef':
+         // Bind a first-class function value capturing the DEFINING scope, so it
+         // closes over enclosing locals (nested defs) and is callable by name.
++        {
++          const enclosing = qualStack[qualStack.length - 1];
++          qualnames.set(stmt, enclosing === undefined ? stmt.name : `${enclosing}.<locals>.${stmt.name}`);
++        }
+         assign(scope, stmt.name, { k: 'func', name: stmt.name, def: stmt, closure: scope });
+         emitter.emit('eml:def', {
+           fn: stmt.name,
+@@ -1055,6 +1209,10 @@ function runProgram(
+         for (const s of stmt.body) {
+           if (s.type !== 'FunctionDef') execStmt(s, classScope);
+         }
++        {
++          const enclosing = qualStack[qualStack.length - 1];
++          classQualnames.set(stmt, enclosing === undefined ? stmt.name : `${enclosing}.<locals>.${stmt.name}`);
++        }
+         assign(scope, stmt.name, { k: 'class', name: stmt.name, def: stmt, attrs: classScope.vars });
+         emitter.emit('eml:classdef', {
+           name: stmt.name,
+diff --git a/scripts/semantic-monitor.baseline.json b/scripts/semantic-monitor.baseline.json
+index 9d16321..ed6eafc 100644
+--- a/scripts/semantic-monitor.baseline.json
++++ b/scripts/semantic-monitor.baseline.json
+@@ -1,5 +1,5 @@
+ {
+-  "programs": 576,
++  "programs": 621,
+   "coverage": {
+     "sigma-summation": 9,
+     "cold-annotation": 5,
+@@ -15,9 +15,9 @@
+     "slice": 37,
+     "dict-literal": 35,
+     "percent-format": 104,
+-    "modulo": 83,
+-    "and-or": 452,
+-    "not": 397,
++    "modulo": 94,
++    "and-or": 497,
++    "not": 442,
+     "break": 17,
+     "continue": 5,
+     "pass": 15,
+@@ -25,9 +25,9 @@
+     "compound-assign": 127,
+     "print-end": 201,
+     "triple-quoted-string": 1,
+-    "sequence-repeat": 92,
+-    "nested-def": 438,
+-    "float-division": 250
++    "sequence-repeat": 93,
++    "nested-def": 443,
++    "float-division": 293
+   },
+   "hashes": {
+     "packages/interp/src/values.ts": "a6105a432e5d3c27",
+@@ -37,11 +37,16 @@
+     "tests/builtin-shapes.test.ts": "de8a5ea6edf0461c",
+     "tests/operator-matrix.test.ts": "dabec950984b5fca",
+     "tests/statement-interaction.test.ts": "81352156cb414ca7",
+-    "packages/interp/src/index.ts": "71e3e06bfde10357",
++    "packages/interp/src/index.ts": "63321fefe898ea7c",
+     "tests/interp.test.ts": "bc51bfbf5f3ce78e",
+     "tests/trace-completeness.test.ts": "db42e0f80f7f669c",
+     "tests/evaluation-order.test.ts": "91e38917b6b7c3a8",
+     "tests/aliasing-visibility.test.ts": "9180804214e757c6",
++    "tests/user-function-arity.test.ts": "59e09ebac6d45ac9",
++    "tests/user-function-arity-identity.test.ts": "3227cfc77c301d1d",
++    "tests/user-function-arity-nesting.test.ts": "ff440a15b53f83bf",
++    "tests/user-function-arity-constructor.test.ts": "03a9a2d143c038d3",
++    "tests/user-function-call-order.test.ts": "5b0bdd96e215568a",
+     "packages/transpiler-python/src/emitter.ts": "fb0d92c15f6d3ea4",
+     "tests/gate-sensitivity.test.ts": "54fbed699e656583",
+     "packages/parser/src/parser.ts": "dea3b2e89f91579a",
+diff --git a/scripts/semantic-monitor.jsonl b/scripts/semantic-monitor.jsonl
+index 5ea684f..5ed04ff 100644
+--- a/scripts/semantic-monitor.jsonl
++++ b/scripts/semantic-monitor.jsonl
+@@ -939,3 +939,34 @@
+ {"stream":"eml","proto":"eml-monitor-v1","seq":939,"ts":"2026-08-30T05:26:32.285Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
+ {"stream":"eml","proto":"eml-monitor-v1","seq":940,"ts":"2026-08-30T05:26:32.313Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
+ {"stream":"eml","proto":"eml-monitor-v1","seq":941,"ts":"2026-08-30T05:27:32.663Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":942,"ts":"2026-08-30T08:59:47.371Z","type":"monitor:alert","kind":"stale-baseline","file":"packages/interp/src/index.ts","unseen":["tests/user-function-arity-constructor.test.ts","tests/user-function-call-order.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":943,"ts":"2026-08-30T08:59:47.376Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":1,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":944,"ts":"2026-08-30T08:59:47.409Z","type":"monitor:accept-refused","alerts":1,"reason":"no --why given"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":945,"ts":"2026-08-30T08:59:56.736Z","type":"monitor:alert","kind":"stale-baseline","file":"packages/interp/src/index.ts","unseen":["tests/user-function-arity-constructor.test.ts","tests/user-function-call-order.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":946,"ts":"2026-08-30T08:59:56.740Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":1,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":947,"ts":"2026-08-30T09:00:07.138Z","type":"monitor:alert","kind":"stale-baseline","file":"packages/interp/src/index.ts","unseen":["tests/user-function-arity-constructor.test.ts","tests/user-function-call-order.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":948,"ts":"2026-08-30T09:00:07.143Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":1,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":949,"ts":"2026-08-30T09:00:07.174Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"EMLP-AUDIT-005 v4: two new conformance gates registered for packages/interp/src/index.ts. user-function-arity-constructor.test.ts carries the R of EMLP-RELAY-0076 (PR #4 blob 4f8f4072) plus two modifier combinations, argument counts varied 1/3/2/3/1/1/1 because the wrong message interpolated args.length. user-function-call-order.test.ts asserts the arity guard fires before eml:call across the five runMethodBody boundaries, which nothing watched. STALE BASELINE only; no corpus program changed."}
++{"stream":"eml","proto":"eml-monitor-v1","seq":950,"ts":"2026-08-30T09:03:51.475Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":951,"ts":"2026-08-30T09:03:53.106Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":952,"ts":"2026-08-30T09:03:54.465Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":953,"ts":"2026-08-30T09:03:56.122Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":954,"ts":"2026-08-30T09:03:56.126Z","type":"monitor:accept","programs":621,"alertsAccepted":0,"why":"drill setup"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":955,"ts":"2026-08-30T09:03:57.562Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":956,"ts":"2026-08-30T09:03:57.569Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":957,"ts":"2026-08-30T09:03:57.617Z","type":"monitor:accept-refused","alerts":1,"reason":"no --why given"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":958,"ts":"2026-08-30T09:03:59.018Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":959,"ts":"2026-08-30T09:03:59.031Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":960,"ts":"2026-08-30T09:03:59.092Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":961,"ts":"2026-08-30T09:04:58.708Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":962,"ts":"2026-08-30T09:09:54.615Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":963,"ts":"2026-08-30T09:09:55.941Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":964,"ts":"2026-08-30T09:09:57.340Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":965,"ts":"2026-08-30T09:09:59.286Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":966,"ts":"2026-08-30T09:09:59.321Z","type":"monitor:accept","programs":621,"alertsAccepted":0,"why":"drill setup"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":967,"ts":"2026-08-30T09:10:00.887Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":968,"ts":"2026-08-30T09:10:00.894Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":969,"ts":"2026-08-30T09:10:00.949Z","type":"monitor:accept-refused","alerts":1,"reason":"no --why given"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":970,"ts":"2026-08-30T09:10:02.781Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":971,"ts":"2026-08-30T09:10:02.790Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":972,"ts":"2026-08-30T09:10:02.861Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index eb2c70a..42d7e2f 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -253,6 +253,60 @@ const SEMANTIC_FILES = [
+       // parameter-passing cases: parameter binding is a different code path,
+       // and the two can be wrong independently.
+       'tests/aliasing-visibility.test.ts',
++      // Added 2026-08-30 (EMLP-AUDIT-005). Every test above calls user
++      // functions with the RIGHT number of arguments, because that is what a
++      // test author writes, so none could see that the count was never checked:
++      // a missing argument was bound to None and a surplus one dropped, and the
++      // call then succeeded with a plausible wrong value.
++      'tests/user-function-arity.test.ts',
++      // Added the same day, and separate on purpose. The file above compares
++      // the exception TYPE, which is the bar tests/builtin-shapes.test.ts sets,
++      // and that bar cannot see three things a first fix got wrong: a bound
++      // call delivers the receiver whether or not the method declared one, so a
++      // zero-parameter method was the single shape the guard could not reject;
++      // the label must come from the function object rather than the call site,
++      // so an alias and a nested function were named wrongly; and functools
++      // hashes its arguments before the wrapped signature is checked, so
++      // rejecting arity above the cache turned `unhashable type: 'list'` into
++      // an arity error the baseline had never produced. Deleting any one of the
++      // three reds a distinct group here.
++      'tests/user-function-arity-identity.test.ts',
++      // Added 2026-08-30 (EMLP-RELAY-0073). The two files above record a
++      // qualified name where a `def` executes; a class body's methods never
++      // reach that branch, so a nested class lost its enclosing `<locals>`
++      // prefix and every function defined inside its methods inherited the
++      // truncated one. Three kinds of definition now have to agree, and this
++      // file is the only place the third is checked.
++      'tests/user-function-arity-nesting.test.ts',
++      // Added 2026-08-29 (EMLP-AUDIT-005). Every test above calls user
++      // functions with the RIGHT number of arguments, because that is what a
++      // test author writes, so none of them could see that the count was never
++      // checked: a missing argument was bound to None and a surplus one was
++      // dropped, and the call then succeeded with a plausible wrong value.
++      // The entry above ends by noting that parameter binding is its own code
++      // path and can be wrong independently — it was, in two places at once.
++      // Deleting either arity check diverges 4 of 8 rows here against real
++      // CPython; before this entry existed, deleting both diverged nothing.
++      'tests/user-function-arity.test.ts',
++      // Added 2026-08-30 (EMLP-RELAY-0076). instantiateClass has TWO arity
++      // paths and only one goes through the shared arityError composer. The
++      // three entries above were all written against the composer, and the
++      // public suite's stand-in for the other one caught the exception and
++      // printed the word TypeError, discarding the message. Rewriting that
++      // hand-written message to a literal left all fifty of those cells
++      // green. These rows print str(e), and their argument counts vary (1, 3,
++      // 2, 3, 1, 1, 1) because the wrong message interpolated args.length —
++      // an all-one-argument witness set cannot tell removing that count from
++      // hardcoding the value every row happens to use.
++      'tests/user-function-arity-constructor.test.ts',
++      // Added 2026-08-30 (EMLP-RELAY-0079 census). The file above and the
++      // three before it all read the interpreter's OUTPUT. None reads when
++      // the guard fires: runMethodBody is one frame serving bound methods,
++      // explicit __init__, __enter__ and both __exit__ paths, and moving its
++      // guard below the eml:call emission takes the emitted count from 0 to 1
++      // for a call whose body never runs while leaving all 62 cells green.
++      // Only the plain-function case was ever asserted, in one row.
++      'tests/user-function-call-order.test.ts',
+     ],
+   ],
+   [
+diff --git a/tests/user-function-arity-constructor.test.ts b/tests/user-function-arity-constructor.test.ts
+new file mode 100644
+index 0000000..3b4ba3f
+--- /dev/null
++++ b/tests/user-function-arity-constructor.test.ts
+@@ -0,0 +1,152 @@
++import { describe, expect, it } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { interpret } from '@eml/interp';
++import { transpileEmlToPython } from '@eml/transpiler-python';
++
++/**
++ * EMLP-AUDIT-005 — the no-`__init__` constructor path.
++ *
++ * `instantiateClass` has two arity paths. The one with an explicit `__init__`
++ * goes through `runMethodBody` and the shared `arityError` composer; the one
++ * WITHOUT `__init__` composes its own message by hand. Every message row added
++ * in v1, v2 and v3 was written against the composer, so it covered three of the
++ * four deciding sites and never reached this one. What stood here instead was
++ *
++ *     CONTROL — class with no __init__, args given
++ *     except TypeError:
++ *         "TypeError"^0
++ *
++ * which proves the guard rejects and throws `e` away. A type-only control
++ * cannot stand in for message coverage: breaking the message to a literal left
++ * all 50 public cells green.
++ *
++ * Two CPython facts, measured rather than recalled, and they disagree:
++ *
++ *     no __init__        Slate() takes no arguments
++ *                        — no count, and NO `<locals>` prefix even when nested
++ *     explicit __init__  make_record.<locals>.Record.__init__() missing 1
++ *                          required positional argument: 'key'
++ *
++ * So the two constructor paths do not share a naming rule, and applying the
++ * method qualname rule here would be wrong in the other direction. The controls
++ * below hold that second rule fixed while the rows above change.
++ *
++ * Rows 1–5 and all six controls are the undisclosed V of EMLP-RELAY-0076,
++ * checked in by EMLP-RELAY-0077 (PR #4, blob `4f8f4072`). Rows 6–7 are the two
++ * modifier combinations my parallel file carried that hers did not.
++ *
++ * The argument counts are deliberately 1, 3, 2, 3, 1, 1, 1 rather than all 1.
++ * The wrong message interpolates `args.length`, so a witness set that holds the
++ * count fixed cannot tell a fix that REMOVES the count from one that hardcodes
++ * the value every row happens to use. Measured: a candidate correct only for a
++ * one-argument construction passes an all-1 gate 12/12.
++ */
++
++const PYTHON = (() => {
++  for (const candidate of process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python']) {
++    if (spawnSync(candidate, ['--version'], { encoding: 'utf8' }).status === 0) return candidate;
++  }
++  return null;
++})();
++
++function cpythonOutput(src: string): string {
++  const py = transpileEmlToPython(src).python;
++  const run = spawnSync(PYTHON!, ['-c', py], { encoding: 'utf8' });
++  if (run.status !== 0) {
++    const last = (run.stderr ?? '').trim().split(/\r?\n/).pop() ?? '';
++    return `!! ${last}`;
++  }
++  return (run.stdout ?? '').replace(/\r\n/g, '\n').trim();
++}
++
++function interpOutput(src: string): string {
++  const run = interpret(src);
++  if (run.error) return `!! ${run.error.type}: ${run.error.message}`;
++  if (!run.ok) return `~~ ${run.unsupported.join(',')}`;
++  return (run.output ?? '').trim();
++}
++
++/** Each row prints `str(e)`, so the message itself is on the wire. */
++const NO_INIT_MESSAGE_ROWS: Array<[string, string]> = [
++  [
++    'top-level class with one constructor argument',
++    'class Slate:\n    def ping(self):\n        return 1\n\ntry:\n    Slate(9) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'top-level class alias with three constructor arguments',
++    'class Origin:\n    def ping(self):\n        return 1\n\nOrigin => Alias\ntry:\n    Alias(1, 2, 3) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'class without __init__ returned from a function',
++    'def make_slate():\n    class Slate:\n        def ping(self):\n            return 1\n    return Slate\n\nmake_slate() => SlateType\ntry:\n    SlateType(4, 5) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'class without __init__ nested below two functions and then aliased',
++    'def outer_scope():\n    def middle_scope():\n        class Cell:\n            def ping(self):\n                return 1\n        return Cell\n    return middle_scope()\n\nouter_scope() => CellType\nCellType => CellAlias\ntry:\n    CellAlias(1, 2, 3) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'class without __init__ defined inside a method of a nested class',
++    'def build_factory():\n    class Factory:\n        def make(self):\n            class Payload:\n                def ping(self):\n                    return 1\n            return Payload\n    Factory() => factory\n    return factory\n\nbuild_factory() => factory\nfactory.make() => PayloadType\ntry:\n    PayloadType(7) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'top-level class alias with ONE constructor argument',
++    'class Plate:\n    def ping(self):\n        return 1\n\nPlate => PlateAlias\ntry:\n    PlateAlias(9) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'class nested below two functions, NOT aliased',
++    'def outer_level():\n    def inner_level():\n        class Deep:\n            def ping(self):\n                return 1\n        return Deep\n    return inner_level()\n\nouter_level() => DeepType\ntry:\n    DeepType(9) => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++];
++
++/** Green on v3 already. A fix here must not be bought by breaking these — the
++ *  last three pin the OPPOSITE rule, that an explicit `__init__` and an
++ *  ordinary method DO carry the full lexical qualifier. */
++const CONTROL_ROWS: Array<[string, string]> = [
++  [
++    'control: top-level class without __init__ accepts zero arguments',
++    'class EmptyTop:\n    def ping(self):\n        return 1\n\nEmptyTop() => value\n"OK"^0\n',
++  ],
++  [
++    'control: nested class without __init__ accepts zero arguments',
++    'def make_empty():\n    class EmptyNested:\n        def ping(self):\n            return 1\n    return EmptyNested\n\nmake_empty() => EmptyType\nEmptyType() => value\n"OK"^0\n',
++  ],
++  [
++    'control: the existing no-__init__ guard raises the right exception type',
++    'class Guarded:\n    def ping(self):\n        return 1\n\ntry:\n    Guarded(1, 2, 3, 4) => value\n    "NO ERROR"^0\nexcept TypeError:\n    "TypeError"^0\n',
++  ],
++  [
++    'control: explicit __init__ in a nested class uses the full qualifier',
++    'def make_record():\n    class Record:\n        def __init__(self, key):\n            key => self.key\n    return Record\n\nmake_record() => RecordType\ntry:\n    RecordType() => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'control: explicit __init__ keeps the definition name through a top-level class alias',
++    'class DefinedClass:\n    def __init__(self, key):\n        key => self.key\n\nDefinedClass => RenamedClass\ntry:\n    RenamedClass() => value\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++  [
++    'control: a regular method on a deeply nested class uses the full qualifier',
++    'def outer_builder():\n    def inner_builder():\n        class DeepClass:\n            def method(self, key):\n                return key\n        DeepClass() => value\n        return value\n    return inner_builder()\n\nouter_builder() => value\ntry:\n    value.method() => result\nexcept TypeError as e:\n    str(e)^0\n',
++  ],
++];
++
++describe('EMLP-AUDIT-005 — no-__init__ constructor message', () => {
++  it('has a real CPython oracle', () => {
++    expect(PYTHON, 'no python on PATH; this gate cannot run without one').not.toBeNull();
++  });
++
++  for (const [label, src] of NO_INIT_MESSAGE_ROWS) {
++    it(`R ${label}`, () => {
++      const expected = cpythonOutput(src);
++      // Without this, a shape where CPython does not raise would compare an
++      // empty string to an empty string and pass while proving nothing about
++      // the message.
++      expect(expected, 'CPython must actually print the caught message').toMatch(/takes no arguments/);
++      expect(interpOutput(src), label).toBe(expected);
++    });
++  }
++
++  for (const [label, src] of CONTROL_ROWS) {
++    it(label, () => {
++      expect(interpOutput(src), label).toBe(cpythonOutput(src));
++    });
++  }
++});
+diff --git a/tests/user-function-arity-identity.test.ts b/tests/user-function-arity-identity.test.ts
+new file mode 100644
+index 0000000..2cbf402
+--- /dev/null
++++ b/tests/user-function-arity-identity.test.ts
+@@ -0,0 +1,178 @@
++import { describe, it, expect } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { transpileEmlToPython } from '@eml/transpiler-python';
++import { interpret } from '@eml/interp';
++
++/**
++ * EMLP-AUDIT-005 v2 — the eight R made public by EMLP-RELAY-0070, as a red gate.
++ *
++ * Per 0070 §4.5, these are written and shown red BEFORE a v2 patch is designed.
++ * Seven of them are cases the v1 candidate answered wrongly. The eighth is not:
++ * V8 is a REGRESSION the candidate introduced, and it is green on the unpatched
++ * product. Both facts are asserted here rather than described, because "red"
++ * covering an old defect and "red" covering a new one are different claims and a
++ * single failing count cannot tell them apart — see the baseline/candidate
++ * columns recorded alongside this file.
++ *
++ * Three roots, from 0070:
++ *
++ *   V1-V5  the guard decides whether there is an implicit receiver from whether
++ *          the METHOD DECLARED a first parameter (`selfParam ? 1 : 0`). A bound
++ *          call always passes the instance, so a method declaring none is
++ *          exactly the case that should report 0 taken and 1 given, and the
++ *          candidate reports no error at all. The same error undercounts every
++ *          method message by one.
++ *
++ *   V6-V7  the error label comes from the call-site identifier, not from the
++ *          function object. CPython names the function that was DEFINED, and
++ *          qualifies a nested one. The v1 deliverable claimed the messages
++ *          matched CPython exactly; that claim held only for top-level direct
++ *          calls, which is all its seven message rows exercised.
++ *
++ *   V8     `functools.cache` hashes its arguments before the underlying
++ *          function's signature is checked, so an unhashable argument raises
++ *          before any arity error. The v1 comment asserted the opposite and
++ *          moved the guard above the cache to match. Measured against CPython
++ *          3.14: `@cache def f(x)` called `f(1, [2])` raises
++ *          `unhashable type: 'list'`; the same function without the decorator
++ *          raises the arity error.
++ *
++ * Every expectation below is taken from real CPython at run time rather than
++ * written out, for the reason the v1 message rows existed and then missed two
++ * whole shapes: a recalled string is a claim about my memory.
++ */
++
++const PYTHON = (() => {
++  const candidates = process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
++  for (const c of candidates) {
++    const r = spawnSync(c, ['--version'], { encoding: 'utf8' });
++    if (r.status === 0) return c;
++  }
++  return null;
++})();
++
++/** CPython's stdout, or `!! <ExceptionType>` when it faults. */
++function cpython(py: string): string {
++  const r = spawnSync(PYTHON!, ['-c', py], { encoding: 'utf8' });
++  if (r.status !== 0) {
++    const last = (r.stderr || '').trim().split('\n').pop() ?? '';
++    return `!! ${last.split(':')[0]}`;
++  }
++  return (r.stdout ?? '').replace(/\r\n/g, '\n').trim();
++}
++
++/** CPython's exception MESSAGE, without the type prefix. */
++function cpythonMessage(py: string): string {
++  const r = spawnSync(PYTHON!, ['-c', py], { encoding: 'utf8' });
++  const last = (r.stderr || '').trim().split('\n').pop() ?? '';
++  return last.replace(/^\w+(\.\w+)*:\s*/, '');
++}
++
++function eml(src: string): string {
++  const r = interpret(src);
++  if (r.error) return `!! ${r.error.type}`;
++  if (!r.ok) return `~~ ${r.unsupported.join(',')}`;
++  return (r.output ?? '').trim();
++}
++
++// [label, EML source]. Each is a bound-receiver or identity shape the v1 guard
++// gets wrong; the expectations come from CPython, not from this file.
++const ROWS: [string, string][] = [
++  ['V1 zero-param method, bound call',
++    'class C:\n    def m():\n        return 7\n\nC() => c\ntry:\n    str(c.m())^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V2 zero-param __init__',
++    'class C:\n    def __init__():\n        "BODY"^0\n\ntry:\n    C() => c\n    "OK"^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V3 zero-param __enter__',
++    'class M:\n    def __enter__():\n        "ENTER"^0\n        return 1\n    def __exit__(self, a, b, c):\n        return 0\n\ntry:\n    with M() as m:\n        "IN"^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V4 zero-param __exit__, protocol passes three',
++    'class M:\n    def __enter__(self):\n        return 1\n    def __exit__():\n        return 0\n\ntry:\n    with M() as m:\n        "IN"^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V5 zero-param method called with one argument',
++    'class C:\n    def m():\n        return 7\n\nC() => c\ntry:\n    str(c.m(1))^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V6 function called through an alias',
++    'def original(x):\n    return x\n\noriginal => alias\ntry:\n    str(alias())^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++  ['V7 nested function',
++    'def outer():\n    def inner(x):\n        return x\n    return inner\n\nouter() => f\ntry:\n    str(f())^0\nexcept TypeError as e:\n    "TypeError"^0\n'],
++];
++
++// Message shapes. V1-V5 are undercounted by one when the receiver is not
++// counted; V6-V7 name the wrong function entirely.
++const MESSAGES: [string, string][] = [
++  ['V1 message names the class and counts the receiver',
++    'class C:\n    def m():\n        return 7\n\nC() => c\nstr(c.m())^0\n'],
++  ['V5 message counts receiver plus the explicit argument',
++    'class C:\n    def m():\n        return 7\n\nC() => c\nstr(c.m(1))^0\n'],
++  ['V6 message names the function that was defined, not the alias',
++    'def original(x):\n    return x\n\noriginal => alias\nstr(alias())^0\n'],
++  ['V7 message qualifies a nested function',
++    'def outer():\n    def inner(x):\n        return x\n    return inner\n\nouter() => f\nstr(f())^0\n'],
++];
++
++describe('EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070', () => {
++  it('has a real CPython to compare against', () => {
++    expect(PYTHON, 'no python on PATH; this gate cannot run without one').not.toBeNull();
++  });
++
++  for (const [label, src] of ROWS) {
++    it(label, () => {
++      expect(eml(src), `${label}\n--- eml ---\n${src}`).toBe(cpython(transpileEmlToPython(src).python));
++    });
++  }
++
++  for (const [label, src] of MESSAGES) {
++    it(label, () => {
++      const expected = cpythonMessage(transpileEmlToPython(src).python);
++      expect(interpret(src).error?.message ?? '(no error)', label).toBe(expected);
++    });
++  }
++
++  // V8 is the one that is GREEN on the unpatched product. It is here as a
++  // regression gate: a v2 that keeps v1's ordering turns it red, and a v2 that
++  // simply reverts the whole guard leaves the seven above red. Nothing else in
++  // this file can distinguish those two failures from each other.
++  it('V8 @cold hashes its arguments before the arity is checked', () => {
++    // Uncaught deliberately. The first version of this row wrapped the call in
++    // try/except so it could share a source shape with the stdout rows, and
++    // then asserted on the MESSAGE — which CPython never printed, because the
++    // program had just caught it. `cpythonMessage` returned '' and the row went
++    // red against a baseline that is in fact correct here, which would have put
++    // a fabricated defect into the handback.
++    const src = '@cold\ndef f(x):\n    return x\n\nstr(f(1, [2]))^0\n';
++    const py = transpileEmlToPython(src).python;
++    expect(cpythonMessage(py), 'CPython must raise the hash error, not the arity error')
++      .toBe("unhashable type: 'list'");
++    expect(interpret(src).error?.message ?? '(no error)', 'the cache wrapper runs first').toBe(
++      "unhashable type: 'list'",
++    );
++  });
++
++  it('V8 control — the same call without @cold IS an arity error', () => {
++    // Without this row, V8 would pass against an interpreter that reported the
++    // hash error for every wrong-arity call, decorated or not.
++    const src = 'def f(x):\n    return x\n\nstr(f(1, [2]))^0\n';
++    const expected = cpythonMessage(transpileEmlToPython(src).python);
++    expect(expected).toMatch(/positional argument/);
++    expect(interpret(src).error?.message ?? '(no error)').toBe(expected);
++  });
++
++  // 0070 §3: the three controls that were green on the v1 candidate. They are
++  // carried forward so a v2 cannot buy the eight above by rejecting more.
++  describe('controls carried forward from 0070 section 3', () => {
++    it('@hot with a missing argument takes the ordinary TypeError path', () => {
++      const src =
++        '@hot\ndef f(x):\n    return x\n\ntry:\n    str(f())^0\nexcept TypeError as e:\n    "TypeError"^0\n';
++      expect(eml(src)).toBe(cpython(transpileEmlToPython(src).python));
++    });
++
++    it('a surplus argument is evaluated and the body is not', () => {
++      const src =
++        'def side():\n    "ARG"^0\n    return 1\n\ndef f(x):\n    "BODY"^0\n    return x\n\ntry:\n    str(f(side(), side()))^0\nexcept TypeError as e:\n    "TypeError"^0\n';
++      expect(eml(src)).toBe(cpython(transpileEmlToPython(src).python));
++    });
++
++    it('a receiver parameter not named self still binds and counts', () => {
++      const src =
++        'class C:\n    def m(this, y):\n        return y\n\nC() => c\ntry:\n    str(c.m())^0\nexcept TypeError as e:\n    "TypeError"^0\n';
++      expect(eml(src)).toBe(cpython(transpileEmlToPython(src).python));
++    });
++  });
++});
+diff --git a/tests/user-function-arity-nesting.test.ts b/tests/user-function-arity-nesting.test.ts
+new file mode 100644
+index 0000000..c47b22c
+--- /dev/null
++++ b/tests/user-function-arity-nesting.test.ts
+@@ -0,0 +1,103 @@
++import { describe, it, expect } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { transpileEmlToPython } from '@eml/transpiler-python';
++import { interpret } from '@eml/interp';
++
++/**
++ * EMLP-AUDIT-005 v3 — the five R published in EMLP-RELAY-0073, plus the seven
++ * controls that were green on v2.
++ *
++ * v2 recorded a qualified name where a `def` executes. A class body's methods
++ * are not reached by that branch — `ClassDef` binds the class and the method
++ * nodes are looked up later — so `instance.className` stayed the bare
++ * `cls.name` and a nested class lost its enclosing `make_vault.<locals>.`
++ * permanently, taking any function defined inside its methods down with it.
++ *
++ * The shape is the same one v1 and v2 each got caught by, one level out: a
++ * fact recorded where one KIND of definition executes, and a second kind that
++ * never passes through there. v1 read identity off the call site; v2 read it
++ * off the def; v3 has to read it off whichever definition actually ran.
++ *
++ * The seven controls come from 0073 §2. They were green on v2, which is what
++ * makes the five reds a specific gap rather than "anything nested is wrong",
++ * and they are carried so a v3 cannot buy the five by prefixing more.
++ */
++
++const PYTHON = (() => {
++  const candidates = process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
++  for (const c of candidates) {
++    const r = spawnSync(c, ['--version'], { encoding: 'utf8' });
++    if (r.status === 0) return c;
++  }
++  return null;
++})();
++
++/** CPython's exception message, without the type prefix. */
++function cpythonMessage(py: string): string {
++  const r = spawnSync(PYTHON!, ['-c', py], { encoding: 'utf8' });
++  const last = (r.stderr || '').trim().split('\n').pop() ?? '';
++  return last.replace(/^\w+(\.\w+)*:\s*/, '');
++}
++
++/** Every source below is UNCAUGHT on purpose: a program that catches the
++ *  exception prints nothing to stderr, and the message assertion would then be
++ *  comparing '' — which is how a v2 row once reported a defect against a
++ *  baseline that was correct. */
++function message(src: string): string {
++  return interpret(src).error?.message ?? '(no error)';
++}
++
++// [label, EML source] — the five discriminating shapes from 0073 §2.
++const REDS: [string, string][] = [
++  ['nested class, method',
++    'def make_vault():\n    class Vault:\n        def open(self, key):\n            return key\n    Vault() => box\n    return box\n\nmake_vault() => box\nbox.open() => result\n'],
++  ['nested class, __init__',
++    'def make_token():\n    class Token:\n        def __init__(self, v):\n            v => self.v\n    Token() => t\n    return t\n\nmake_token() => t\n'],
++  ['nested class, __enter__',
++    'def make_context():\n    class Context:\n        def __enter__(self, extra):\n            return 1\n        def __exit__(self, a, b, c):\n            return 0\n    Context() => c\n    return c\n\nmake_context() => ctx\nwith ctx as v:\n    "IN"^0\n'],
++  ['function nested inside a nested-class method',
++    'def build_worker():\n    class Worker:\n        def produce(self):\n            def task(x):\n                return x\n            return task\n    Worker() => w\n    return w.produce()\n\nbuild_worker() => f\nf() => z\n'],
++  ['class nested below two functions',
++    'def outer_scope():\n    def middle_scope():\n        class Cell:\n            def read(self, k):\n                return k\n        Cell() => c\n        return c\n    return middle_scope()\n\nouter_scope() => cell\ncell.read() => z\n'],
++];
++
++// The seven controls 0073 §2 reports green on v2.
++const CONTROLS: [string, string][] = [
++  ['plain function, two-hop alias',
++    'def original(x):\n    return x\n\noriginal => a1\na1 => a2\na2() => z\n'],
++  ['nested function, two-hop alias',
++    'def outer():\n    def inner(x):\n        return x\n    return inner\n\nouter() => b1\nb1 => b2\nb2() => z\n'],
++  ['@cold surplus with an unhashable argument hashes first',
++    '@cold\ndef f(x):\n    return x\n\nf(1, {"k": 2}) => z\n'],
++  ['@cold through an alias with hashable surplus args uses the definition name',
++    '@cold\ndef coldfn(x):\n    return x\n\ncoldfn => ca\nca(1, 2) => z\n'],
++  ['function nested inside a TOP-LEVEL class method',
++    'class Top:\n    def produce(self):\n        def task(x):\n            return x\n        return task\n\nTop() => t\nt.produce() => f\nf() => z\n'],
++  ['three-level nested function',
++    'def l1():\n    def l2():\n        def l3(x):\n            return x\n        return l3\n    return l2()\n\nl1() => f\nf() => z\n'],
++  ['a top-level class alias does not change the method label',
++    'class Named:\n    def m(self, y):\n        return y\n\nNamed => Aliased\nAliased() => obj\nobj.m() => z\n'],
++];
++
++describe('EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073)', () => {
++  it('has a real CPython to compare against', () => {
++    expect(PYTHON, 'no python on PATH; this gate cannot run without one').not.toBeNull();
++  });
++
++  for (const [label, src] of REDS) {
++    it(`R — ${label}`, () => {
++      const expected = cpythonMessage(transpileEmlToPython(src).python);
++      expect(expected, 'the shape must actually raise in CPython, or the row proves nothing')
++        .toMatch(/positional argument/);
++      expect(message(src), `${label}\n--- eml ---\n${src}`).toBe(expected);
++    });
++  }
++
++  describe('controls green on v2, carried forward', () => {
++    for (const [label, src] of CONTROLS) {
++      it(label, () => {
++        expect(message(src), label).toBe(cpythonMessage(transpileEmlToPython(src).python));
++      });
++    }
++  });
++});
+diff --git a/tests/user-function-arity.test.ts b/tests/user-function-arity.test.ts
+new file mode 100644
+index 0000000..6eddcc1
+--- /dev/null
++++ b/tests/user-function-arity.test.ts
+@@ -0,0 +1,176 @@
++import { describe, it, expect } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { transpileEmlToPython } from '@eml/transpiler-python';
++import { interpret } from '@eml/interp';
++
++/**
++ * EMLP-AUDIT-005 — a user function binds whatever arguments it is given and
++ * never counts them.
++ *
++ * `packages/interp/src/index.ts:620`
++ *
++ *     fn.params.forEach((p, i) => local.vars.set(p.name, args[i] ?? NONE));
++ *
++ * A missing argument reads `undefined`, which `?? NONE` turns into a bound
++ * `None`; a surplus argument is not iterated and is dropped. Neither raises.
++ * CPython raises TypeError before the body runs, in both directions.
++ *
++ * SCOPE — the finding names one line. There are two binding sites with the
++ * identical shape, and the second serves six call sites:
++ *
++ *     620  fn.params.forEach((p, i) => ...)          plain def, incl. @cold/@hot
++ *     705  restParams.forEach((p, i) => ...)         runMethodBody, called from
++ *          666  __init__ via instantiateClass
++ *          680  callMethod  ->  instance.m(args)
++ *          1013 __enter__
++ *          1017/1028/1036  __exit__
++ *
++ * A fix at 620 alone leaves five of the eight rows below still red. The whole
++ * interpreter contains exactly two arity checks: line 668 (a class with no
++ * __init__, the CONTROL row here) and line 1294, which belongs to the builtin
++ * argument accessor and not to user functions.
++ *
++ * Each row is compared against real CPython rather than against a hardcoded
++ * expectation, following tests/builtin-shapes.test.ts — the same differential
++ * shape, one axis over: that file covers builtin arity, this one covers user
++ * function arity, which was never gated at all.
++ */
++
++const PYTHON = (() => {
++  const candidates = process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
++  for (const c of candidates) {
++    const r = spawnSync(c, ['--version'], { encoding: 'utf8' });
++    if (r.status === 0) return c;
++  }
++  return null;
++})();
++
++/** What CPython does with this program: its stdout, or the exception type. */
++function cpython(py: string): string {
++  const r = spawnSync(PYTHON!, ['-c', py], { encoding: 'utf8' });
++  if (r.status !== 0) {
++    const last = (r.stderr || '').trim().split('\n').pop() ?? '';
++    return `!! ${last.split(':')[0]}`;
++  }
++  return (r.stdout ?? '').replace(/\r\n/g, '\n').trim();
++}
++
++/** What the interpreter does with the same program, in the same vocabulary. */
++function eml(src: string): string {
++  const r = interpret(src);
++  if (r.error) return `!! ${r.error.type}`;
++  if (!r.ok) return `~~ ${r.unsupported.join(',')}`;
++  return (r.output ?? '').trim();
++}
++
++/**
++ * [label, binding site, EML source].
++ *
++ * The comment on each row records what the interpreter answered before the
++ * fix, because "returned a plausible value" is the failure mode worth
++ * remembering: a missing argument silently became None and a surplus one
++ * silently vanished, so the call SUCCEEDED with the wrong arity.
++ */
++const ROWS: [string, string, string][] = [
++  // ---- 620: the plain function frame, the site the finding names ----
++  ['plain def, one arg missing', '620',
++    'def f(x):\n    return x\n\ntry:\n    str(f())^0\nexcept TypeError:\n    "TypeError"^0\n'],          // was: None
++  ['plain def, one arg surplus', '620',
++    'def f(x):\n    return x\n\ntry:\n    str(f(1, 2))^0\nexcept TypeError:\n    "TypeError"^0\n'],      // was: 1
++  ['plain def, two of three missing', '620',
++    'def f(a, b, c):\n    return a\n\ntry:\n    str(f(1))^0\nexcept TypeError:\n    "TypeError"^0\n'],   // was: 1
++  ['@cold def, one arg surplus', '620',
++    '@cold\ndef f(x):\n    return x\n\ntry:\n    str(f(1, 2))^0\nexcept TypeError:\n    "TypeError"^0\n'], // was: 1
++
++  // ---- 705: runMethodBody, which the finding's file:line does not reach ----
++  ['method, one arg missing', '705',
++    'class C:\n    def m(self, y):\n        return y\n\nC() => c\ntry:\n    str(c.m())^0\nexcept TypeError:\n    "TypeError"^0\n'],       // was: None
++  ['method, one arg surplus', '705',
++    'class C:\n    def m(self, y):\n        return y\n\nC() => c\ntry:\n    str(c.m(1, 2))^0\nexcept TypeError:\n    "TypeError"^0\n'],   // was: 1
++  ['__init__, one arg missing', '705 via 666',
++    'class C:\n    def __init__(self, x):\n        x => self.x\n\ntry:\n    C() => c\n    str(c.x)^0\nexcept TypeError:\n    "TypeError"^0\n'],      // was: None
++  ['__init__, two args surplus', '705 via 666',
++    'class C:\n    def __init__(self, x):\n        x => self.x\n\ntry:\n    C(1, 2, 3) => c\n    str(c.x)^0\nexcept TypeError:\n    "TypeError"^0\n'], // was: 1
++
++  // ---- CONTROL ----
++  // The interpreter's one working arity check, at line 668. This row is here so
++  // that a fix which simply raises TypeError from every call, and a probe that
++  // reports red on every row, are both visible. If this row ever goes red the
++  // rest of the file stops meaning anything.
++  ['CONTROL — class with no __init__, args given', '668',
++    'class C:\n    def m(self):\n        return 1\n\ntry:\n    C(1, 2) => c\n    "NO ERROR"^0\nexcept TypeError:\n    "TypeError"^0\n'],
++];
++
++describe('EMLP-AUDIT-005 — user function arity is not checked', () => {
++  it('has a real CPython to compare against', () => {
++    expect(PYTHON, 'no python on PATH; this gate cannot run without one').not.toBeNull();
++  });
++
++  for (const [label, site, src] of ROWS) {
++    it(`${label}  [${site}]`, () => {
++      const expected = cpython(transpileEmlToPython(src).python);
++      const actual = eml(src);
++      expect(actual, `${label}\n--- eml ---\n${src}`).toBe(expected);
++    });
++  }
++
++  it('every row above raises before the body runs, not after', () => {
++    // A fix that counts arguments *inside* the body would still print the
++    // body's output first. CPython prints nothing at all.
++    const src =
++      'def f(x):\n    "BODY"^0\n    return x\n\ntry:\n    str(f(1, 2))^0\nexcept TypeError:\n    "TypeError"^0\n';
++    const expected = cpython(transpileEmlToPython(src).python);
++    expect(eml(src), 'the body must not run when the arity is wrong').toBe(expected);
++  });
++
++  // The two rows below are about the RECORD rather than the value. A guard
++  // placed one line too late still produces the right answer and still leaves
++  // the wrong trace, and the trace is what every golden, every equivalence
++  // check and the workbench read. Without these, moving the guard below the
++  // `eml:call` emit is invisible.
++  it('records no call for a wrong-arity call, because none happened', () => {
++    const r = interpret(
++      'def f(x):\n    return x\n\ntry:\n    str(f(1, 2))^0\nexcept TypeError:\n    "TypeError"^0\n',
++    );
++    const calls = r.events.filter((e) => e.type === 'eml:call');
++    expect(calls.map((e) => JSON.stringify(e)).join('\n')).toBe('');
++  });
++
++  // Every row above compares the exception TYPE, which is the bar
++  // tests/builtin-shapes.test.ts sets. That bar cannot see the message, and the
++  // message is where a method's counts live: drop the bound `self` from the
++  // arithmetic and all thirteen rows above still pass while the interpreter
++  // reports "takes 1 positional argument but 2 were given" for a call CPython
++  // describes as 2 and 3. The drill that removes it went green until this row
++  // existed. Messages are compared against CPython, not against my recall of
++  // it — five details differ from the obvious string.
++  const MESSAGES: [string, string][] = [
++    ['plain missing', 'def f(x):\n    return x\n\nstr(f())^0\n'],
++    ['plain surplus', 'def f(x):\n    return x\n\nstr(f(1, 2))^0\n'],
++    ['plural + Oxford comma', 'def f(a, b, c):\n    return a\n\nstr(f())^0\n'],
++    ['two names join with and', 'def f(a, b, c):\n    return a\n\nstr(f(1))^0\n'],
++    ['method counts the bound self',
++      'class C:\n    def m(self, y):\n        return y\n\nC() => c\nstr(c.m(1, 2))^0\n'],
++    ['method missing is qualified',
++      'class C:\n    def m(self, y):\n        return y\n\nC() => c\nstr(c.m())^0\n'],
++    ['__init__ is qualified and counts self',
++      'class C:\n    def __init__(self, x):\n        x => self.x\n\nC(1, 2, 3) => c\n'],
++  ];
++
++  for (const [label, src] of MESSAGES) {
++    it(`message matches CPython — ${label}`, () => {
++      const r = spawnSync(PYTHON!, ['-c', transpileEmlToPython(src).python], { encoding: 'utf8' });
++      const expected = (r.stderr || '').trim().split('\n').pop()!.replace(/^TypeError: /, '');
++      const actual = interpret(src).error?.message ?? '(no error)';
++      expect(actual, label).toBe(expected);
++    });
++  }
++
++  it('records the call for a right-arity call, so the row above can fail', () => {
++    // The NULL control for the row above: an assertion that no call is ever
++    // recorded would pass against an interpreter that records nothing at all.
++    const r = interpret('def f(x):\n    return x\n\nstr(f(1))^0\n');
++    const calls = r.events.filter((e) => e.type === 'eml:call');
++    expect(calls.length, JSON.stringify(r.events.map((e) => e.type))).toBe(1);
++  });
++});
+diff --git a/tests/user-function-call-order.test.ts b/tests/user-function-call-order.test.ts
+new file mode 100644
+index 0000000..0ac4dba
+--- /dev/null
++++ b/tests/user-function-call-order.test.ts
+@@ -0,0 +1,96 @@
++import { describe, expect, it } from 'vitest';
++import { interpret } from '@eml/interp';
++
++/**
++ * EMLP-AUDIT-005 — where the arity guard fires relative to `eml:call`.
++ *
++ * `tests/user-function-arity.test.ts` has carried one row asserting that a
++ * wrong-arity PLAIN function call records no `eml:call`, because no call
++ * happened. Nothing asserted the same of a wrong-arity METHOD call, and
++ * `runMethodBody` is a single frame serving six boundaries — bound methods,
++ * explicit `__init__`, `__enter__`, and `__exit__` on both paths.
++ *
++ * Measured, not inferred: moving that guard below the `eml:call` emission takes
++ * the emitted count from 0 to 1 for a call whose body never runs, and leaves
++ * every one of the 62 public cells green. The interpreter is right and nothing
++ * was watching it. These rows are what watches it.
++ *
++ * The last three rows are the reason the first five mean anything. `events`
++ * being empty passes every "records nothing" assertion, including on an
++ * interpreter that emits no events at all — so a positive control has to show
++ * the same channel carrying traffic, by name and in order.
++ */
++
++function calls(src: string): string[] {
++  const r = interpret(src);
++  expect(r.error, `unexpected interpreter error in fixture:\n${src}`).toBeUndefined();
++  expect(r.unsupported, `fixture uses unsupported constructs:\n${src}`).toEqual([]);
++  // `TraceEvent` is flat, with an index signature, so `e.fn` is `unknown` and
++  // there is no discriminant to narrow on. Casting it to string would keep
++  // compiling if eml:call ever stopped carrying `fn` — and every row below
++  // would then compare undefined to undefined and pass. Reporting the whole
++  // event instead turns that into a visible failure.
++  const names: string[] = [];
++  for (const e of r.events) {
++    if (e.type !== 'eml:call') continue;
++    names.push(typeof e.fn === 'string' ? e.fn : `<eml:call without a string fn: ${JSON.stringify(e)}>`);
++  }
++  return names;
++}
++
++const METHOD = 'class C:\n    def m(self, y):\n        return y\n\nC() => c\n';
++const CTX_OK =
++  'class Ctx:\n    def __enter__(self):\n        return 1\n    def __exit__(self, a, b, c):\n        return 0\n\n';
++
++describe('EMLP-AUDIT-005 — the arity guard fires before eml:call', () => {
++  it('a wrong-arity bound method call records no call', () => {
++    expect(calls(`${METHOD}try:\n    str(c.m(1, 2))^0\nexcept TypeError:\n    "T"^0\n`)).toEqual([]);
++  });
++
++  it('a wrong-arity explicit __init__ records no call', () => {
++    expect(
++      calls(
++        'class K:\n    def __init__(self, x):\n        x => self.x\n\ntry:\n    K(1, 2) => k\nexcept TypeError:\n    "T"^0\n',
++      ),
++    ).toEqual([]);
++  });
++
++  it('a no-__init__ constructor given arguments records no call', () => {
++    expect(
++      calls(
++        'class Bare:\n    def ping(self):\n        return 1\n\ntry:\n    Bare(9) => b\nexcept TypeError:\n    "T"^0\n',
++      ),
++    ).toEqual([]);
++  });
++
++  it('a wrong-arity __enter__ records no call', () => {
++    expect(
++      calls(
++        'class Ctx:\n    def __enter__(self, extra):\n        return 1\n    def __exit__(self, a, b, c):\n        return 0\n\ntry:\n    with Ctx() as v:\n        str(v)^0\nexcept TypeError:\n    "T"^0\n',
++      ),
++    ).toEqual([]);
++  });
++
++  it('a wrong-arity __exit__ records __enter__ and stops there', () => {
++    // __exit__ is reached only after the body, so this row asserts a boundary
++    // BETWEEN two calls rather than the absence of all of them — the one shape
++    // an "expect empty" row cannot express.
++    expect(
++      calls(
++        'class Half:\n    def __enter__(self):\n        return 1\n    def __exit__(self, a):\n        return 0\n\ntry:\n    with Half() as v:\n        str(v)^0\nexcept TypeError:\n    "T"^0\n',
++      ),
++    ).toEqual(['Half.__enter__']);
++  });
++
++  it('CONTROL a right-arity method call records exactly one call, by name', () => {
++    expect(calls(`${METHOD}str(c.m(1))^0\n`)).toEqual(['C.m']);
++  });
++
++  it('CONTROL a right-arity with records __enter__ then __exit__, in order', () => {
++    expect(calls(`${CTX_OK}with Ctx() as v:\n    str(v)^0\n`)).toEqual(['Ctx.__enter__', 'Ctx.__exit__']);
++  });
++
++  it('CONTROL a right-arity plain function still records its call', () => {
++    expect(calls('def f(x):\n    return x\n\nstr(f(1))^0\n')).toEqual(['f']);
++  });
++});
