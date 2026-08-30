@@ -1,0 +1,418 @@
+{
+  "hits": {
+    "186": [
+      "arityError"
+    ],
+    "191": [
+      "params.length"
+    ],
+    "192": [
+      "params.length"
+    ],
+    "193": [
+      "missing"
+    ],
+    "195": [
+      "missing"
+    ],
+    "196": [
+      "missing"
+    ],
+    "197": [
+      "missing"
+    ],
+    "198": [
+      "missing"
+    ],
+    "199": [
+      "missing"
+    ],
+    "202": [
+      "positional argument",
+      "missing"
+    ],
+    "203": [
+      "missing"
+    ],
+    "209": [
+      "params.length",
+      "positional argument"
+    ],
+    "633": [
+      "callMethod"
+    ],
+    "647": [
+      "instantiateClass"
+    ],
+    "653": [
+      "args.length"
+    ],
+    "663": [
+      "args.length",
+      "arityError"
+    ],
+    "701": [
+      "args.length"
+    ],
+    "771": [
+      "instantiateClass"
+    ],
+    "782": [
+      "runMethodBody"
+    ],
+    "783": [
+      "args.length"
+    ],
+    "784": [
+      "args.length",
+      "takes no arguments"
+    ],
+    "791": [
+      "callMethod"
+    ],
+    "796": [
+      "runMethodBody"
+    ],
+    "810": [
+      "runMethodBody"
+    ],
+    "827": [
+      "args.length",
+      "arityError"
+    ],
+    "882": [
+      "args.length"
+    ],
+    "910": [
+      "args.length"
+    ],
+    "1117": [
+      "args.length"
+    ],
+    "1156": [
+      "runMethodBody"
+    ],
+    "1160": [
+      "runMethodBody"
+    ],
+    "1171": [
+      "runMethodBody"
+    ],
+    "1179": [
+      "runMethodBody"
+    ],
+    "1441": [
+      "missing"
+    ],
+    "1447": [
+      "args.length"
+    ]
+  },
+  "mapped": [
+    186,
+    191,
+    192,
+    193,
+    195,
+    196,
+    197,
+    198,
+    199,
+    202,
+    203,
+    209,
+    633,
+    647,
+    663,
+    701,
+    771,
+    782,
+    783,
+    784,
+    791,
+    796,
+    810,
+    827,
+    1156,
+    1160,
+    1171,
+    1179
+  ],
+  "excluded": [
+    653,
+    882,
+    910,
+    1117,
+    1441,
+    1447
+  ],
+  "unmapped": [],
+  "control_50": [
+    0,
+    50
+  ],
+  "control_62": [
+    5,
+    57
+  ],
+  "control_62_failing": [
+    "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class defined inside a nested-class method",
+    "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class nested two functions deep",
+    "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class returned from a function",
+    "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — the same class reached through an alias",
+    "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — top-level class, no __init__, one argument"
+  ],
+  "probe_62": [
+    0,
+    62
+  ],
+  "breaks": [
+    {
+      "id": "K1",
+      "observable": "acceptance/type",
+      "site": "S1",
+      "on_probe": false,
+      "new_red_50": 21,
+      "new_red_62": 21,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V6 function called through an alias",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V6 message names the function that was defined, not the alias",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V7 message qualifies a nested function",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V7 nested function",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V8 control — the same call without @cold IS an arity error",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 controls carried forward from 0070 section 3 @hot with a missing argument takes the ordinary TypeError path",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 controls carried forward from 0070 section 3 a surplus argument is evaluated and the body is not",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — function nested inside a nested-class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward function nested inside a TOP-LEVEL class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward nested function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward plain function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward three-level nested function",
+        "EMLP-AUDIT-005 — user function arity is not checked every row above raises before the body runs, not after",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — plain missing",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — plain surplus",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — plural + Oxford comma",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — two names join with and",
+        "EMLP-AUDIT-005 — user function arity is not checked plain def, one arg missing  [620]",
+        "EMLP-AUDIT-005 — user function arity is not checked plain def, one arg surplus  [620]",
+        "EMLP-AUDIT-005 — user function arity is not checked plain def, two of three missing  [620]",
+        "EMLP-AUDIT-005 — user function arity is not checked records no call for a wrong-arity call, because none happened"
+      ]
+    },
+    {
+      "id": "K2",
+      "observable": "identity",
+      "site": "S1",
+      "on_probe": false,
+      "new_red_50": 8,
+      "new_red_62": 8,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V6 message names the function that was defined, not the alias",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V7 message qualifies a nested function",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — function nested inside a nested-class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward @cold through an alias with hashable surplus args uses the definition name",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward function nested inside a TOP-LEVEL class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward nested function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward plain function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward three-level nested function"
+      ]
+    },
+    {
+      "id": "K3",
+      "observable": "order",
+      "site": "S1",
+      "on_probe": false,
+      "new_red_50": 2,
+      "new_red_62": 2,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V8 @cold hashes its arguments before the arity is checked",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward @cold surplus with an unhashable argument hashes first"
+      ]
+    },
+    {
+      "id": "K4",
+      "observable": "exact message",
+      "site": "S2",
+      "on_probe": true,
+      "new_red_50": 0,
+      "new_red_62": 5,
+      "new_cells": [
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class defined inside a nested-class method",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class nested two functions deep",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class returned from a function",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — the same class reached through an alias",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — top-level class, no __init__, one argument"
+      ]
+    },
+    {
+      "id": "K5",
+      "observable": "identity",
+      "site": "S2",
+      "on_probe": true,
+      "new_red_50": 0,
+      "new_red_62": 3,
+      "new_cells": [
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class defined inside a nested-class method",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class nested two functions deep",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) R — a class returned from a function"
+      ]
+    },
+    {
+      "id": "K6",
+      "observable": "acceptance/type",
+      "site": "S3",
+      "on_probe": false,
+      "new_red_50": 20,
+      "new_red_62": 23,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V1 message names the class and counts the receiver",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V1 zero-param method, bound call",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V2 zero-param __init__",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V3 zero-param __enter__",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V4 zero-param __exit__, protocol passes three",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V5 message counts receiver plus the explicit argument",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V5 zero-param method called with one argument",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 controls carried forward from 0070 section 3 a receiver parameter not named self still binds and counts",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — class nested below two functions",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __enter__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __init__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward a top-level class alias does not change the method label",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a class alias does not change an explicit __init__ definition name",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a deeply nested class ordinary method keeps the full qualifier",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a nested class WITH an explicit __init__ keeps the full qualifier",
+        "EMLP-AUDIT-005 — user function arity is not checked __init__, one arg missing  [705 via 666]",
+        "EMLP-AUDIT-005 — user function arity is not checked __init__, two args surplus  [705 via 666]",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — __init__ is qualified and counts self",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — method counts the bound self",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — method missing is qualified",
+        "EMLP-AUDIT-005 — user function arity is not checked method, one arg missing  [705]",
+        "EMLP-AUDIT-005 — user function arity is not checked method, one arg surplus  [705]"
+      ]
+    },
+    {
+      "id": "K7",
+      "observable": "protocol counts",
+      "site": "S3",
+      "on_probe": false,
+      "new_red_50": 17,
+      "new_red_62": 22,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V1 message names the class and counts the receiver",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V1 zero-param method, bound call",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V2 zero-param __init__",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V3 zero-param __enter__",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V4 zero-param __exit__, protocol passes three",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V5 message counts receiver plus the explicit argument",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — class nested below two functions",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — function nested inside a nested-class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __enter__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __init__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward a top-level class alias does not change the method label",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward function nested inside a TOP-LEVEL class method",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a class alias does not change an explicit __init__ definition name",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a deeply nested class ordinary method keeps the full qualifier",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a nested class WITH an explicit __init__ keeps the full qualifier",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward nested no-__init__ class constructs with zero arguments",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward top-level no-__init__ class constructs with zero arguments",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — __init__ is qualified and counts self",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — method counts the bound self",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — method missing is qualified",
+        "EMLP-AUDIT-005 — user function arity is not checked method, one arg surplus  [705]"
+      ]
+    },
+    {
+      "id": "K8",
+      "observable": "identity",
+      "site": "S3",
+      "on_probe": false,
+      "new_red_50": 5,
+      "new_red_62": 7,
+      "new_cells": [
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — class nested below two functions",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — function nested inside a nested-class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __enter__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __init__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, method",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a deeply nested class ordinary method keeps the full qualifier",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a nested class WITH an explicit __init__ keeps the full qualifier"
+      ]
+    },
+    {
+      "id": "K9",
+      "observable": "exact message",
+      "site": "S4",
+      "on_probe": false,
+      "new_red_50": 14,
+      "new_red_62": 17,
+      "new_cells": [
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V6 message names the function that was defined, not the alias",
+        "EMLP-AUDIT-005 v2 — the R published in EMLP-RELAY-0070 V7 message qualifies a nested function",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — class nested below two functions",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — function nested inside a nested-class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __enter__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, __init__",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) R — nested class, method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward a top-level class alias does not change the method label",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward function nested inside a TOP-LEVEL class method",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward nested function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward plain function, two-hop alias",
+        "EMLP-AUDIT-005 v3 — nested class identity (EMLP-RELAY-0073) controls green on v2, carried forward three-level nested function",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a class alias does not change an explicit __init__ definition name",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a deeply nested class ordinary method keeps the full qualifier",
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward a nested class WITH an explicit __init__ keeps the full qualifier",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — method missing is qualified",
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — plain missing"
+      ]
+    },
+    {
+      "id": "K10",
+      "observable": "exact message",
+      "site": "S4",
+      "on_probe": false,
+      "new_red_50": 1,
+      "new_red_62": 1,
+      "new_cells": [
+        "EMLP-AUDIT-005 — user function arity is not checked message matches CPython — plural + Oxford comma"
+      ]
+    },
+    {
+      "id": "K11",
+      "observable": "acceptance/type",
+      "site": "S2",
+      "on_probe": false,
+      "new_red_50": 1,
+      "new_red_62": 2,
+      "new_cells": [
+        "EMLP-AUDIT-005 — no-__init__ constructor message (EMLP-RELAY-0076) controls green on v3, carried forward the existing guard still raises TypeError, not something else",
+        "EMLP-AUDIT-005 — user function arity is not checked CONTROL — class with no __init__, args given  [668]"
+      ]
+    },
+    {
+      "id": "K13",
+      "observable": "order",
+      "site": "S1",
+      "on_probe": false,
+      "new_red_50": 1,
+      "new_red_62": 1,
+      "new_cells": [
+        "EMLP-AUDIT-005 — user function arity is not checked records no call for a wrong-arity call, because none happened"
+      ]
+    },
+    {
+      "id": "K12",
+      "observable": "order",
+      "site": "S3",
+      "on_probe": false,
+      "new_red_50": 0,
+      "new_red_62": 0,
+      "new_cells": []
+    }
+  ],
+  "pristine_sha256": "303a8547ee51db2f3963ce1a15e8d53f5bc894f53ec614d7dd8848285bc49800",
+  "restored_sha256": "303a8547ee51db2f3963ce1a15e8d53f5bc894f53ec614d7dd8848285bc49800",
+  "post_restore": [
+    5,
+    57
+  ]
+}
