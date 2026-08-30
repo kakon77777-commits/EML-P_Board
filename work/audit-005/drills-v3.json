@@ -13,16 +13,43 @@
     {
       "id": "D1",
       "restores": "the receiver is not counted (v1's `selfParam ? 1 : 0` shape)",
-      "failed": -1,
-      "passed": -1,
-      "failing": []
+      "failed": 11,
+      "passed": 39,
+      "failing": [
+        "V1 zero-param method, bound call",
+        "V2 zero-param __init__",
+        "V3 zero-param __enter__",
+        "V1 message names the class and counts the receiver",
+        "V5 message counts receiver plus the explicit argument",
+        "R — nested class, method",
+        "R — nested class, __init__",
+        "R — nested class, __enter__",
+        "R — class nested below two functions",
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — __init__ is qualified and counts self"
+      ]
     },
     {
       "id": "D2",
       "restores": "the receiver is counted but compared against the params after it",
-      "failed": -1,
-      "passed": -1,
-      "failing": []
+      "failed": 14,
+      "passed": 36,
+      "failing": [
+        "V4 zero-param __exit__, protocol passes three",
+        "a receiver parameter not named self still binds and counts",
+        "R — nested class, method",
+        "R — nested class, __init__",
+        "R — nested class, __enter__",
+        "R — function nested inside a nested-class method",
+        "R — class nested below two functions",
+        "function nested inside a TOP-LEVEL class method",
+        "a top-level class alias does not change the method label",
+        "method, one arg missing  [705]",
+        "__init__, one arg missing  [705 via 666]",
+        "message matches CPython — method counts the bound self",
+        "message matches CPython — method missing is qualified",
+        "message matches CPython — __init__ is qualified and counts self"
+      ]
     },
     {
       "id": "D3",
@@ -132,6 +159,31 @@
       "failing": [
         "V8 @cold hashes its arguments before the arity is checked",
         "@cold surplus with an unhashable argument hashes first"
+      ]
+    },
+    {
+      "id": "D9",
+      "restores": "a class definition records only its bare name (the v2 gap)",
+      "failed": 5,
+      "passed": 45,
+      "failing": [
+        "R — nested class, method",
+        "R — nested class, __init__",
+        "R — nested class, __enter__",
+        "R — function nested inside a nested-class method",
+        "R — class nested below two functions"
+      ]
+    },
+    {
+      "id": "D10",
+      "restores": "the arity label is composed separately from qualifiedName (the v3 slip)",
+      "failed": 4,
+      "passed": 46,
+      "failing": [
+        "R — nested class, method",
+        "R — nested class, __init__",
+        "R — nested class, __enter__",
+        "R — class nested below two functions"
       ]
     }
   ]
