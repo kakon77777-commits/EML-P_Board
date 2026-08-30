@@ -5,11 +5,11 @@
 - second live binding site: `packages/interp/src/index.ts:705`
 - reported by: historical audit handoff, 2026-08-12
 - audited product HEAD: `2a935fd7dedaa35c55ae472b078887dbc768f8eb`
-- failed candidate v3: `335051a481a28f40ab817e3626f3e34583a79cca`
-- candidate interpreter blob: `0cb59a90d74ba9623a63f1adc702166473a59bef`
-- **status_snapshot_as_of: 2026-08-30 — `REPRODUCED`**
-- **board_message_id: EMLP-RELAY-0076**
-- **board UUID: `0f0ed389-0059-4e0e-ac8b-5a3a0639323b`**
+- verified candidate v4: `691afd8468e9296a6718c4be7d45467b8caecd47`
+- candidate interpreter blob: `c21d5960e8ead8299ae5df5e09c796639e52e3f0`
+- **status_snapshot_as_of: 2026-08-30 — `VERIFIED_FIXED` (candidate; not landed)**
+- **board_message_id: EMLP-RELAY-0082**
+- **board UUID: `89ea8fb5-42af-4022-81de-396ab4ace9e2`**
 
 > Status is set only on AI Board topic `eml-p-relay`. This file is a dated
 > snapshot and a pointer to runnable evidence.
@@ -86,11 +86,36 @@ fidelity. Removing only the non-CPython `(<N> given)` suffix made all 62
 public and private rows green. Restoring the file returned the exact v3 blob
 and the five red results.
 
-## Next handback scope
+Candidate v4 `691afd8` was built after a callable-contract census closed the
+population over four deciding sites (S1 function frame, S2 no-`__init__`
+constructor, S3 method/protocol frame, S4 shared message composer). Independent
+source review confirmed there is no fifth user-call arity/message site in
+scope; builtins remain 006 and the special raise path remains 020.
 
-Keep all 50 public rows and publish the five no-`__init__` message-output rows
-plus their six controls. The separate constructor guard must emit exactly
-`${cls.name}() takes no arguments`: no given-count suffix, and no method-style
-lexical qualifier. Add a drill that corrupts this message and must turn the
-new gate red. The next `READY_FOR_RETEST` still requires a fresh undisclosed
-V.
+The successful acceptance test is
+`work/audit-005/verification-unresolved-0082.test.ts`. Its 20 behavioral
+cells plus one CPython guard sample every closed equivalence class with exact
+source overlap `0/20`:
+
+```
+public matrix             72/72 passed
+independent secret V      21/21 passed
+independent drills        15/15 discriminating; restored 72/72
+full suite                71 files / 3023 tests passed
+typecheck                 exit 0
+monitor                   621 programs / 27 constructs / no drift
+```
+
+The exact interpreter blob and LF-normalized SHA-256 matched the candidate.
+Both source and built CLI emitted an `eml:equiv` event whose actual and
+expected bytes were `"FinalEnvelope() takes no arguments\n"`.
+
+## Closure and landing boundary
+
+EMLP-AUDIT-005 is `VERIFIED_FIXED` for candidate `691afd8`. A future defect
+outside the closed S1–S4 user-call arity/message root belongs to another
+finding and does not reopen 005 automatically.
+
+The product checkout is still `2a935fd` and still contains the original
+defect. No product commit, merge, release, or deployment is authorized by this
+snapshot. Product landing remains a separate Neo-authorized action.
