@@ -307,10 +307,10 @@ index 9d16321..ed6eafc 100644
      "tests/gate-sensitivity.test.ts": "54fbed699e656583",
      "packages/parser/src/parser.ts": "dea3b2e89f91579a",
 diff --git a/scripts/semantic-monitor.jsonl b/scripts/semantic-monitor.jsonl
-index 5ea684f..5ed04ff 100644
+index 5ea684f..91bf4a3 100644
 --- a/scripts/semantic-monitor.jsonl
 +++ b/scripts/semantic-monitor.jsonl
-@@ -939,3 +939,34 @@
+@@ -939,3 +939,52 @@
  {"stream":"eml","proto":"eml-monitor-v1","seq":939,"ts":"2026-08-30T05:26:32.285Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
  {"stream":"eml","proto":"eml-monitor-v1","seq":940,"ts":"2026-08-30T05:26:32.313Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
  {"stream":"eml","proto":"eml-monitor-v1","seq":941,"ts":"2026-08-30T05:27:32.663Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
@@ -345,19 +345,41 @@ index 5ea684f..5ed04ff 100644
 +{"stream":"eml","proto":"eml-monitor-v1","seq":970,"ts":"2026-08-30T09:10:02.781Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
 +{"stream":"eml","proto":"eml-monitor-v1","seq":971,"ts":"2026-08-30T09:10:02.790Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
 +{"stream":"eml","proto":"eml-monitor-v1","seq":972,"ts":"2026-08-30T09:10:02.861Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":973,"ts":"2026-08-31T05:08:31.677Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":974,"ts":"2026-08-31T05:08:33.201Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":975,"ts":"2026-08-31T05:08:34.758Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":976,"ts":"2026-08-31T05:08:59.389Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":1,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":977,"ts":"2026-08-31T05:09:00.933Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":1,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":978,"ts":"2026-08-31T05:09:02.411Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":979,"ts":"2026-08-31T05:09:42.140Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":980,"ts":"2026-08-31T05:09:42.934Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":981,"ts":"2026-08-31T05:09:43.719Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":982,"ts":"2026-08-31T05:09:44.728Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":983,"ts":"2026-08-31T05:09:44.733Z","type":"monitor:accept","programs":621,"alertsAccepted":0,"why":"drill setup"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":984,"ts":"2026-08-31T05:09:45.608Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":985,"ts":"2026-08-31T05:09:45.615Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":986,"ts":"2026-08-31T05:09:45.648Z","type":"monitor:accept-refused","alerts":1,"reason":"no --why given"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":987,"ts":"2026-08-31T05:09:46.488Z","type":"monitor:alert","kind":"semantics-changed","file":"packages/interp/src/values.ts","tests":["tests/percent-format.test.ts","tests/sum-compensation.test.ts","tests/phase7d-exceptions.test.ts","tests/builtin-shapes.test.ts","tests/operator-matrix.test.ts","tests/statement-interaction.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":988,"ts":"2026-08-31T05:09:46.496Z","type":"monitor:run","programs":621,"constructs":27,"alerts":1,"notes":0,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":989,"ts":"2026-08-31T05:09:46.526Z","type":"monitor:accept","programs":621,"alertsAccepted":1,"why":"drill"}
++{"stream":"eml","proto":"eml-monitor-v1","seq":990,"ts":"2026-08-31T05:10:43.751Z","type":"monitor:run","programs":621,"constructs":27,"alerts":0,"notes":0,"accepting":false}
 diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
-index eb2c70a..42d7e2f 100644
+index eb2c70a..0cfb04d 100644
 --- a/scripts/semantic-monitor.mjs
 +++ b/scripts/semantic-monitor.mjs
-@@ -253,6 +253,60 @@ const SEMANTIC_FILES = [
+@@ -253,6 +253,54 @@ const SEMANTIC_FILES = [
        // parameter-passing cases: parameter binding is a different code path,
        // and the two can be wrong independently.
        'tests/aliasing-visibility.test.ts',
-+      // Added 2026-08-30 (EMLP-AUDIT-005). Every test above calls user
++      // Added 2026-08-29 (EMLP-AUDIT-005). Every test above calls user
 +      // functions with the RIGHT number of arguments, because that is what a
-+      // test author writes, so none could see that the count was never checked:
-+      // a missing argument was bound to None and a surplus one dropped, and the
-+      // call then succeeded with a plausible wrong value.
++      // test author writes, so none of them could see that the count was never
++      // checked: a missing argument was bound to None and a surplus one was
++      // dropped, and the call then succeeded with a plausible wrong value.
++      // The entry above ends by noting that parameter binding is its own code
++      // path and can be wrong independently — it was, in two places at once.
++      // Deleting either arity check diverges 4 of 8 rows here against real
++      // CPython; before this entry existed, deleting both diverged nothing.
 +      'tests/user-function-arity.test.ts',
 +      // Added the same day, and separate on purpose. The file above compares
 +      // the exception TYPE, which is the bar tests/builtin-shapes.test.ts sets,
@@ -378,16 +400,6 @@ index eb2c70a..42d7e2f 100644
 +      // truncated one. Three kinds of definition now have to agree, and this
 +      // file is the only place the third is checked.
 +      'tests/user-function-arity-nesting.test.ts',
-+      // Added 2026-08-29 (EMLP-AUDIT-005). Every test above calls user
-+      // functions with the RIGHT number of arguments, because that is what a
-+      // test author writes, so none of them could see that the count was never
-+      // checked: a missing argument was bound to None and a surplus one was
-+      // dropped, and the call then succeeded with a plausible wrong value.
-+      // The entry above ends by noting that parameter binding is its own code
-+      // path and can be wrong independently — it was, in two places at once.
-+      // Deleting either arity check diverges 4 of 8 rows here against real
-+      // CPython; before this entry existed, deleting both diverged nothing.
-+      'tests/user-function-arity.test.ts',
 +      // Added 2026-08-30 (EMLP-RELAY-0076). instantiateClass has TWO arity
 +      // paths and only one goes through the shared arityError composer. The
 +      // three entries above were all written against the composer, and the
