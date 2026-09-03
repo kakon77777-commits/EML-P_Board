@@ -1,0 +1,38 @@
+{
+  "targeted": [
+    0,
+    8
+  ],
+  "ledger_before": [
+    "0bc441fdc2321d706f289260808c81901bb69fee0597d1082ba516a06042bd31",
+    221588,
+    1037
+  ],
+  "ledger_after": [
+    "0bc441fdc2321d706f289260808c81901bb69fee0597d1082ba516a06042bd31",
+    221588,
+    1037
+  ],
+  "drill_ledger_types": [
+    "monitor:run",
+    "monitor:run",
+    "monitor:run",
+    "monitor:run",
+    "monitor:accept",
+    "monitor:alert",
+    "monitor:run",
+    "monitor:accept-refused",
+    "monitor:alert",
+    "monitor:run",
+    "monitor:accept"
+  ],
+  "null_control": {
+    "exit": 0,
+    "bytes_delta": 176,
+    "lines_delta": 1
+  },
+  "post_restore": [
+    0,
+    8
+  ]
+}
