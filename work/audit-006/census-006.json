@@ -1,0 +1,142 @@
+[
+  {
+    "shape": "abs zero args",
+    "call": "abs()",
+    "interp": "TypeError: abs() missing required argument",
+    "cpython": "TypeError: abs() takes exactly one argument (0 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "abs surplus",
+    "call": "abs(1, 2)",
+    "interp": "1",
+    "cpython": "TypeError: abs() takes exactly one argument (2 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "len zero args",
+    "call": "len()",
+    "interp": "TypeError: len() missing required argument",
+    "cpython": "TypeError: len() takes exactly one argument (0 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "len surplus",
+    "call": "len([1], 2)",
+    "interp": "1",
+    "cpython": "TypeError: len() takes exactly one argument (2 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "repr zero args",
+    "call": "repr()",
+    "interp": "TypeError: repr() missing required argument",
+    "cpython": "TypeError: repr() takes exactly one argument (0 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "repr surplus",
+    "call": "repr(1, 2)",
+    "interp": "1",
+    "cpython": "TypeError: repr() takes exactly one argument (2 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "str zero args",
+    "call": "str()",
+    "interp": "",
+    "cpython": "",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "str surplus",
+    "call": "str(\"a\", \"b\")",
+    "interp": "a",
+    "cpython": "TypeError: decoding str is not supported",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "sum zero args",
+    "call": "sum()",
+    "interp": "TypeError: sum() missing required argument",
+    "cpython": "TypeError: sum() takes at least 1 positional argument (0 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "sum three args",
+    "call": "sum([1], 0, 9)",
+    "interp": "1",
+    "cpython": "TypeError: sum() takes at most 2 arguments (3 given)",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "int zero args",
+    "call": "int()",
+    "interp": "0",
+    "cpython": "0",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "int with base 2",
+    "call": "int(\"101\", 2)",
+    "interp": "101",
+    "cpython": "5",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "int base rejects",
+    "call": "int(\"5\", 2)",
+    "interp": "5",
+    "cpython": "ValueError: invalid literal for int() with base 2: '5'",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "int non-str with base",
+    "call": "int(1, 2)",
+    "interp": "1",
+    "cpython": "TypeError: int() can't convert non-string with explicit base",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "float zero args",
+    "call": "float()",
+    "interp": "0.0",
+    "cpython": "0.0",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "float surplus",
+    "call": "float(1, 2)",
+    "interp": "1.0",
+    "cpython": "TypeError: float expected at most 1 argument, got 2",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "set zero args",
+    "call": "set()",
+    "interp": "set()",
+    "cpython": "set()",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "set from an iterable",
+    "call": "set([1, 2])",
+    "interp": "(defer) converting an iterable to a set is not modeled yet",
+    "cpython": "(not compared)",
+    "verdict": "DEFER"
+  },
+  {
+    "shape": "min zero args",
+    "call": "min()",
+    "interp": "ValueError: min() iterable argument is empty",
+    "cpython": "TypeError: min expected at least 1 argument, got 0",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "max zero args",
+    "call": "max()",
+    "interp": "ValueError: max() iterable argument is empty",
+    "cpython": "TypeError: max expected at least 1 argument, got 0",
+    "verdict": "DIVERGE"
+  }
+]

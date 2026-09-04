@@ -1,0 +1,80 @@
+{
+  "control": [
+    0,
+    51
+  ],
+  "mutations": [
+    {
+      "id": "C1",
+      "label": "abs of a float loses its sign handling",
+      "failed": 1,
+      "passed": 50
+    },
+    {
+      "id": "C2",
+      "label": "int stops truncating toward zero",
+      "failed": 1,
+      "passed": 50
+    },
+    {
+      "id": "C3",
+      "label": "min/max of one argument stops iterating it",
+      "failed": 5,
+      "passed": 46
+    },
+    {
+      "id": "C4",
+      "label": "sum stops refusing a string start",
+      "failed": 1,
+      "passed": 50
+    },
+    {
+      "id": "C5",
+      "label": "len stops sharing iterableItems",
+      "failed": 6,
+      "passed": 45
+    },
+    {
+      "id": "N1",
+      "label": "need() stops rejecting a missing argument at all",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N2",
+      "label": "need()'s message becomes a literal",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N3",
+      "label": "min/max with no arguments raises the other exception type",
+      "failed": 1,
+      "passed": 50
+    },
+    {
+      "id": "N4",
+      "label": "int's ignored second argument becomes a different ignored value",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N5",
+      "label": "float's zero-argument default changes",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N6",
+      "label": "set() stops refusing an iterable and silently returns empty",
+      "failed": 0,
+      "passed": 51
+    }
+  ],
+  "pristine_sha256": "63321fefe898ea7c7e2bbaee722c061eb4e5a91306832d9e7abf37ad43398e8c",
+  "restored_sha256": "63321fefe898ea7c7e2bbaee722c061eb4e5a91306832d9e7abf37ad43398e8c",
+  "post_restore": [
+    0,
+    51
+  ]
+}
