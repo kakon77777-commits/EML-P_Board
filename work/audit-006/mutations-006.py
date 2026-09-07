@@ -61,6 +61,35 @@ MUTATIONS = [
     ("N6", "set() stops refusing an iterable and silently returns empty",
      "        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');",
      "        if (false) throw new Unsupported('set(iterable)', 'x');"),
+
+    # --- added for the revised census, per EMLP-RELAY-0090 section 3 ----------
+    # N6 alone cannot separate the two set contracts, because one site serves
+    # both: set(iterable) is a designed defer and set(a, b) should be an arity
+    # error before any conversion is attempted. These two move the boundary in
+    # each direction independently.
+    ("N7", "set's defer moves to two arguments, so set(iterable) stops deferring",
+     "        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');",
+     "        if (args.length > 1) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');"),
+    ("N8", "set's defer becomes an arity TypeError for BOTH shapes",
+     "        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');",
+     "        if (args.length > 0) throw new PyError('TypeError', 'set expected at most 1 argument');"),
+
+    # N4 guards the base decision. A candidate that defers or implements the
+    # SECOND argument can still leave the THIRD silently consumed, so the
+    # three-argument surplus needs a mutation of its own.
+    ("N4b", "int silently consumes a third argument as well as a second",
+     "        const a = args[0] ?? INT(0n);",
+     "        const a = args[2] ?? args[0] ?? INT(0n);"),
+
+    # str has two boundaries, not one: 2-3 arguments are a decoding/type path in
+    # CPython and 4+ is true arity surplus. 0088 called str("a","b") surplus,
+    # which is the wrong observable. One mutation per boundary.
+    ("N9", "str returns its SECOND argument on the decoding path",
+     "        const sv = need(args, 0, name);",
+     "        const sv = args.length > 1 ? args[1] : need(args, 0, name);"),
+    ("N10", "str's zero-argument default stops being the empty string",
+     "        if (args.length === 0) return STR('');",
+     "        if (args.length === 0) return STR('x');"),
 ]
 
 
@@ -94,10 +123,28 @@ if cf != 0:
     sys.exit(2)
 
 rows = []
+# An anchor written in this file is joined with LF. The checkout is CRLF, so a
+# MULTI-LINE anchor cannot match it - and on 2026-09-07 C5 silently did not,
+# while the run still printed a tidy "caught 5". A skipped mutation is not
+# "not caught"; it is not measured, and a battery that reports a summary over
+# a skipped row is a checker reporting a count without its finding. Both are
+# fixed here: anchors are rewritten to the file's own newline before matching,
+# and any anchor that still fails to match makes the whole run exit non-zero.
+LF = chr(10)
+CRLF = chr(13) + chr(10)
+FILE_NL = CRLF if pristine_bytes.count(CRLF.encode()) else LF
+
+def anchor(t):
+    return t.replace(LF, FILE_NL) if FILE_NL != LF else t
+
+skipped = []
 for mid, label, find, repl in MUTATIONS:
+    find, repl = anchor(find), anchor(repl)
     if pristine.count(find) != 1:
-        print("  !! %-3s anchor not unique (%d)" % (mid, pristine.count(find)))
-        rows.append({"id": mid, "label": label, "failed": -1})
+        print("  !! %-3s ANCHOR DID NOT MATCH (%d occurrences) - NOT MEASURED"
+              % (mid, pristine.count(find)))
+        rows.append({"id": mid, "label": label, "failed": -1, "status": "NOT MEASURED"})
+        skipped.append(mid)
         continue
     io.open(SRC, "wb").write(pristine.replace(find, repl, 1).encode("utf-8"))
     f, p = run_gate()
@@ -119,3 +166,10 @@ io.open(os.path.join(OUT, "mutations-006.json"), "w", encoding="utf-8", newline=
                 "pristine_sha256": h0, "restored_sha256": h1,
                 "post_restore": [pf, pp]}, ensure_ascii=False, indent=2))
 print(NL + "mutations-006.json")
+
+if skipped:
+    print()
+    print("  !! %d mutation(s) NOT MEASURED: %s" % (len(skipped), ", ".join(skipped)))
+    print("  !! the caught/not-caught counts above are over a smaller population")
+    print("  !! than this battery claims. Fix the anchors and re-run.")
+    sys.exit(1)

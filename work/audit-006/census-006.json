@@ -49,10 +49,31 @@
     "verdict": "MATCH"
   },
   {
-    "shape": "str surplus",
+    "shape": "str one arg legal",
+    "call": "str(\"a\")",
+    "interp": "a",
+    "cpython": "a",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "str two args",
     "call": "str(\"a\", \"b\")",
     "interp": "a",
     "cpython": "TypeError: decoding str is not supported",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "str three args",
+    "call": "str(\"a\", \"b\", \"c\")",
+    "interp": "a",
+    "cpython": "TypeError: decoding str is not supported",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "str four args",
+    "call": "str(\"a\", \"b\", \"c\", \"d\")",
+    "interp": "a",
+    "cpython": "TypeError: str expected at most 3 arguments, got 4",
     "verdict": "DIVERGE"
   },
   {
@@ -77,10 +98,24 @@
     "verdict": "MATCH"
   },
   {
+    "shape": "int one arg legal",
+    "call": "int(\"10\")",
+    "interp": "10",
+    "cpython": "10",
+    "verdict": "MATCH"
+  },
+  {
     "shape": "int with base 2",
     "call": "int(\"101\", 2)",
     "interp": "101",
     "cpython": "5",
+    "verdict": "DIVERGE"
+  },
+  {
+    "shape": "int three args",
+    "call": "int(\"10\", 2, 3)",
+    "interp": "10",
+    "cpython": "TypeError: int expected at most 2 arguments, got 3",
     "verdict": "DIVERGE"
   },
   {
@@ -126,6 +161,13 @@
     "verdict": "DEFER"
   },
   {
+    "shape": "set two args",
+    "call": "set(1, 2)",
+    "interp": "(defer) converting an iterable to a set is not modeled yet",
+    "cpython": "(not compared)",
+    "verdict": "DEFER"
+  },
+  {
     "shape": "min zero args",
     "call": "min()",
     "interp": "ValueError: min() iterable argument is empty",
@@ -138,5 +180,19 @@
     "interp": "ValueError: max() iterable argument is empty",
     "cpython": "TypeError: max expected at least 1 argument, got 0",
     "verdict": "DIVERGE"
+  },
+  {
+    "shape": "min empty iterable",
+    "call": "min([])",
+    "interp": "ValueError: min() iterable argument is empty",
+    "cpython": "ValueError: min() iterable argument is empty",
+    "verdict": "MATCH"
+  },
+  {
+    "shape": "max empty iterable",
+    "call": "max([])",
+    "interp": "ValueError: max() iterable argument is empty",
+    "cpython": "ValueError: max() iterable argument is empty",
+    "verdict": "MATCH"
   }
 ]

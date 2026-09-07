@@ -1,0 +1,27 @@
+call sites across 741 corpus programs
+  int    1:1464
+  str    1:12968
+  float  1:63
+  abs    1:23
+  len    1:2036
+  repr   1:107
+  sum    1:53   2:3
+  min    1:25   3:1
+  max    1:38   2:3   3:1
+  set    1:7
+
+witnesses for every count other than one argument:
+  max(2 args) x3
+     min-max-selection: max("", "")))^0
+     min-max-selection: max(2, 2.0)) + "")^0
+  max(3 args) x1
+     min-max-selection: max(3, 7, 5)))^0
+  min(3 args) x1
+     min-max-selection: min(3, 7, 5)))^0
+  sum(2 args) x3
+     running-total-sum: sum(daily, 100)) + "")^0
+     running-total-sum: sum([], 100)))^0
+
+  int with a base    : 0
+  str with 2+        : 0
+  set with 2+        : 0

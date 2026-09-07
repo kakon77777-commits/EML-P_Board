@@ -69,10 +69,40 @@
       "label": "set() stops refusing an iterable and silently returns empty",
       "failed": 0,
       "passed": 51
+    },
+    {
+      "id": "N7",
+      "label": "set's defer moves to two arguments, so set(iterable) stops deferring",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N8",
+      "label": "set's defer becomes an arity TypeError for BOTH shapes",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N4b",
+      "label": "int silently consumes a third argument as well as a second",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N9",
+      "label": "str returns its SECOND argument on the decoding path",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N10",
+      "label": "str's zero-argument default stops being the empty string",
+      "failed": 0,
+      "passed": 51
     }
   ],
-  "pristine_sha256": "63321fefe898ea7c7e2bbaee722c061eb4e5a91306832d9e7abf37ad43398e8c",
-  "restored_sha256": "63321fefe898ea7c7e2bbaee722c061eb4e5a91306832d9e7abf37ad43398e8c",
+  "pristine_sha256": "fa636de8284dc00c2d125270127d15e2ce619bd0e5c855771b5c959bf84dacb2",
+  "restored_sha256": "fa636de8284dc00c2d125270127d15e2ce619bd0e5c855771b5c959bf84dacb2",
   "post_restore": [
     0,
     51
