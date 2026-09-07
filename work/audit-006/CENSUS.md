@@ -1,194 +1,209 @@
-# EMLP-AUDIT-006 — revised builtin contract census
+# EMLP-AUDIT-006 — builtin contract census, revision 2
 
-- reply_to: EMLP-RELAY-0090, EMLP-RELAY-0091 (§3)
-- status: CENSUS_FOR_REVIEW (revised)
+- reply_to: EMLP-RELAY-0095 (revision 1 was EMLP-RELAY-0093, reviewed at 0095)
+- status: CENSUS_FOR_REVIEW
 - product HEAD at measurement: `127c961`
 - worktree: `EML-wt-audit006`, HEAD `5bb34d3`, interp blob `c21d5960e8ead8299ae5df5e09c796639e52e3f0` — identical to the product's
-- product modified: **no**
-- candidate: **not started**, per 0091 §3
+- product modified: **no**; candidate **not started**
 
 ```
-28 shapes    MATCH 8   DIVERGE 18   DEFER 2   NO-COMPARE 0
-16 mutations caught 6   not caught 10   restore IDENTICAL
+30 shapes
+  raw outcomes   MATCH 9   DIVERGE 18   DESIGNED_DEFER 1   UNEXPECTED_DEFER 2
+  closure        OK 10     DEFECT 20
+
+19 mutations     caught 6   not caught 13   restore IDENTICAL
 ```
 
-0090 predicted a revised minimum of 24 shapes at MATCH 4 / DIVERGE 19 / DEFER 1.
-The measured revision is 28 / 8 / 18 / 2. The three differences are findings,
-not bookkeeping, and each is below.
+Revision 2 answers the six conditions in 0095 §4. The largest change is not a
+count: **outcome and authorization are now two axes**, and every defer row
+carries a real CPython oracle.
 
 ---
 
-## 1. What 0088 got wrong
+## 1. The correction 0095 asked for: a missing oracle is not an absent obligation
 
-**`str("a","b")` is not a surplus-argument case, and I filed it as one.**
-CPython's `str` takes up to three positional arguments, so two and three
-arguments are a decoding/type path and true arity surplus begins at four. The
-divergence I reported is real — the interpreter returns `"a"` where CPython
-raises — but the reason I attached to it was wrong, and that wrong reason
-happened to support my headline ("no builtin rejects surplus arguments"), so I
-did not look again. It is the same shape this audit is about: a cell sorted
-into a category it does not belong to, agreeing with the conclusion, therefore
-not re-read.
+Revision 1 wrote `(not compared)` in the CPython column of every defer row, and
+then counted `set(1,2)` as a second DEFER as though that were a verdict. It is
+not. `(not compared)` was a fact about the harness — no `eml:equiv` event is
+emitted when the interpreter raises — reported in the column where a fact about
+the contract belongs.
 
-Measured on real CPython 3.14.5:
+`eml run` transpiles and executes via real CPython, so it still answers for a
+shape the interpreter defers on. Every defer row now has one:
 
 ```
-str("a","b")          TypeError: decoding str is not supported
-str("a","b","c")      TypeError: decoding str is not supported
-str("a","b","c","d")  TypeError: str expected at most 3 arguments, got 4
+set from an iterable   interp (defer)   CPython {1, 2}
+set one non-iterable   interp (defer)   CPython TypeError: 'int' object is not iterable
+set two args           interp (defer)   CPython TypeError: set expected at most 1 argument, got 2
 ```
 
-**`set(1,2)` is not a divergence — it is a second defer**, which is the sharper
-version of your point. One site (`args.length > 0`) serves two contracts, so
-the interpreter answers both with the same `Unsupported`. It cannot distinguish
-them, and the census now shows that as two DEFER rows rather than one.
+And the two axes are separated:
+
+```
+outcome        what the run did          MATCH / DIVERGE / DESIGNED_DEFER / UNEXPECTED_DEFER
+authorized     whether that is allowed   OK / DEFECT
+```
+
+A defer nobody designed is a defect that happens to have deferred. Only
+`set(iterable)` is a stated design decision, so only it is `DESIGNED_DEFER`.
+The closure line — **OK 10, DEFECT 20 of 30** — is the axis a candidate must
+move. The raw outcome counts are kept because they are the measurement, but
+they are no longer a single total that a candidate could appear to improve by
+converting a divergence into a defer.
 
 ---
 
-## 2. The argument-shape boundaries
+## 2. Argument-shape boundaries
 
-Each builtin's argument count is divided into regions with different contracts.
-0088 had one region per builtin, which is why three boundaries were invisible.
+`set` has four regions, not three. Revision 1 wrote "1 = DESIGNED DEFER", which
+is too coarse: a single argument that is not iterable is a TypeError in CPython
+and cannot be represented by the same row as the designed defer.
 
 ```
-set   0        legal, returns set()
-      1        DESIGNED DEFER, converting an iterable is not modeled
-      2+       arity TypeError, before any conversion is attempted
+set   0             legal, returns set()
+      1 iterable    DESIGNED DEFER — conversion is not modeled
+      1 non-iterable  TypeError: 'int' object is not iterable
+      2+            TypeError: set expected at most 1 argument, got N
 
-int   0, 1     legal
-      2        implement-or-defer policy decision (§5)
-      3+       arity TypeError, whichever policy is chosen for 2
+int   0, 1          legal
+      2             defer (recommended, §5); today a wrong VALUE
+      3+            arity TypeError, whichever policy is chosen for 2
 
-str   0, 1     legal
-      2-3      decoding/type path, not arity
-      4+       arity TypeError
+str   0, 1          legal
+      2-3           decoding/type path, not arity
+      4+            arity TypeError
 
-min   0        arity TypeError          min expected at least 1 argument, got 0
-max   ()       ValueError               min() iterable argument is empty
-      an empty iterable and no argument are DIFFERENT, and reach ONE line
+min   0 arguments   TypeError: min expected at least 1 argument, got 0
+max   empty iterable ValueError: min() iterable argument is empty
+      — different exception TYPES, reaching ONE line
 
-abs   0        arity TypeError          the four callers of need() share ONE
-len   2+       arity TypeError          message; CPython words each of them
-repr                                    differently, in each direction
+abs   0             arity TypeError    the four callers of need() share ONE
+len   2+            arity TypeError    message; CPython words each of them
+repr  1             LEGAL, control     differently, in each direction
 sum
 float
 ```
 
 ---
 
-## 3. The 28 shapes
+## 3. The 30 shapes
 
-Every probe prints `str(e)` to stdout, so a row that printed only the exception
-type name would pass against any message. Both sides come from one `eml:equiv`
-event and the comparison is made in the harness, not by reading the CLI's `ok`.
+Every probe prints `str(e)` to stdout, so a row printing only the exception type
+name would pass against any message. Comparison is made in the harness, not by
+reading the CLI's `ok`.
 
 ```
-shape                  interpreter                          real CPython                          verdict
-abs zero args          TypeError: abs() missing required    TypeError: abs() takes exactly one    DIVERGE
-abs surplus            1                                    TypeError: abs() takes exactly one    DIVERGE
-len zero args          TypeError: len() missing required    TypeError: len() takes exactly one    DIVERGE
-len surplus            1                                    TypeError: len() takes exactly one    DIVERGE
-repr zero args         TypeError: repr() missing required   TypeError: repr() takes exactly on    DIVERGE
-repr surplus           1                                    TypeError: repr() takes exactly on    DIVERGE
-str zero args          (empty)                              (empty)                               MATCH
-str one arg legal      a                                    a                                     MATCH
-str two args           a                                    TypeError: decoding str is not sup    DIVERGE
-str three args         a                                    TypeError: decoding str is not sup    DIVERGE
-str four args          a                                    TypeError: str expected at most 3     DIVERGE
-sum zero args          TypeError: sum() missing required    TypeError: sum() takes at least 1     DIVERGE
-sum three args         1                                    TypeError: sum() takes at most 2 a    DIVERGE
-int zero args          0                                    0                                     MATCH
-int one arg legal      10                                   10                                    MATCH
-int with base 2        101                                  5                                     DIVERGE
-int three args         10                                   TypeError: int expected at most 2     DIVERGE
-int base rejects       5                                    ValueError: invalid literal for in    DIVERGE
-int non-str with base  1                                    TypeError: int() can't convert non    DIVERGE
-float zero args        0.0                                  0.0                                   MATCH
-float surplus          1.0                                  TypeError: float expected at most     DIVERGE
-set zero args          set()                                set()                                 MATCH
-set from an iterable   (defer) converting an iterable to    (not compared)                        DEFER
-set two args           (defer) converting an iterable to    (not compared)                        DEFER
-min zero args          ValueError: min() iterable argumen   TypeError: min expected at least 1    DIVERGE
-max zero args          ValueError: max() iterable argumen   TypeError: max expected at least 1    DIVERGE
-min empty iterable     ValueError: min() iterable argumen   ValueError: min() iterable argumen    MATCH
-max empty iterable     ValueError: max() iterable argumen   ValueError: max() iterable argumen    MATCH
+shape                  interpreter                      real CPython                     outcome           allowed
+abs zero args          TypeError: abs() missing require TypeError: abs() takes exactly o DIVERGE           DEFECT
+abs surplus            1                                TypeError: abs() takes exactly o DIVERGE           DEFECT
+len zero args          TypeError: len() missing require TypeError: len() takes exactly o DIVERGE           DEFECT
+len surplus            1                                TypeError: len() takes exactly o DIVERGE           DEFECT
+repr one arg legal     42                               42                               MATCH             OK
+repr zero args         TypeError: repr() missing requir TypeError: repr() takes exactly  DIVERGE           DEFECT
+repr surplus           1                                TypeError: repr() takes exactly  DIVERGE           DEFECT
+str zero args          (empty)                          (empty)                          MATCH             OK
+str one arg legal      a                                a                                MATCH             OK
+str two args           a                                TypeError: decoding str is not s DIVERGE           DEFECT
+str three args         a                                TypeError: decoding str is not s DIVERGE           DEFECT
+str four args          a                                TypeError: str expected at most  DIVERGE           DEFECT
+sum zero args          TypeError: sum() missing require TypeError: sum() takes at least  DIVERGE           DEFECT
+sum three args         1                                TypeError: sum() takes at most 2 DIVERGE           DEFECT
+int zero args          0                                0                                MATCH             OK
+int one arg legal      10                               10                               MATCH             OK
+int with base 2        101                              5                                DIVERGE           DEFECT
+int three args         10                               TypeError: int expected at most  DIVERGE           DEFECT
+int base rejects       5                                ValueError: invalid literal for  DIVERGE           DEFECT
+int non-str with base  1                                TypeError: int() can't convert n DIVERGE           DEFECT
+float zero args        0.0                              0.0                              MATCH             OK
+float surplus          1.0                              TypeError: float expected at mos DIVERGE           DEFECT
+set zero args          set()                            set()                            MATCH             OK
+set from an iterable   (defer) converting an iterable t {1, 2}                           DESIGNED_DEFER    OK
+set one non-iterable   (defer) converting an iterable t TypeError: 'int' object is not i UNEXPECTED_DEFER  DEFECT
+set two args           (defer) converting an iterable t TypeError: set expected at most  UNEXPECTED_DEFER  DEFECT
+min zero args          ValueError: min() iterable argum TypeError: min expected at least DIVERGE           DEFECT
+max zero args          ValueError: max() iterable argum TypeError: max expected at least DIVERGE           DEFECT
+min empty iterable     ValueError: min() iterable argum ValueError: min() iterable argum MATCH             OK
+max empty iterable     ValueError: max() iterable argum ValueError: max() iterable argum MATCH             OK
 ```
 
 **The heaviest row is still a value, not a message**: `int("101", 2)` returns
-`101` where CPython returns `5`. It is the only wrong value in twenty-eight
-rows. Everything else is an acceptance or a message.
+`101` where CPython returns `5` — the only wrong value in thirty rows.
 
-**`min`/`max` now show both halves adjacently.** The empty-iterable rows MATCH
-and the zero-argument rows DIVERGE, and both reach line `:1474`. One site
-cannot be right about two shapes that CPython gives different exception types,
-and the existing gate covers exactly the half that happens to be correct — so
-that assertion is load-bearing and wrong at the same time.
+**One reason, three meanings.** All three set defers carry the same text,
+`converting an iterable to a set is not modeled yet`. For `set([1,2])` it is
+true. For `set(1)` the argument is not an iterable, so the reason describes
+something that is not happening. For `set(1,2)` the call is an arity error that
+should never reach a conversion question at all. One site, one sentence, three
+contracts.
+
+**`repr(42)` is the positive control 0095 asked for.** Without it, a candidate
+that fixed `repr()`'s zero and surplus cases by refusing every `repr` call
+would show a clean red-to-green. Mutation N12 below is that candidate, and it
+is NOT CAUGHT.
 
 ---
 
 ## 4. What the existing gate can see
 
-`tests/builtin-shapes.test.ts`, 51 cells, all green, on an unmutated tree.
-
-Sixteen mutations, both directions, because "not caught" is meaningless without
-"can be caught":
+`tests/builtin-shapes.test.ts`, 51 cells, green on an unmutated tree.
+Nineteen mutations, both directions.
 
 ```
-control                                                       0 failed | 51 passed
+control                                                        0 failed | 51 passed
 
-C1  abs of a float loses its sign handling                     1 failed  CAUGHT
-C2  int stops truncating toward zero                           1 failed  CAUGHT
-C3  min/max of one argument stops iterating it                 5 failed  CAUGHT
-C4  sum stops refusing a string start                          1 failed  CAUGHT
-C5  len stops sharing iterableItems                            6 failed  CAUGHT
-N3  min/max with no arguments raises the other exception type  1 failed  CAUGHT
+C1  abs of a float loses its sign handling                      1 failed  CAUGHT
+C2  int stops truncating toward zero                            1 failed  CAUGHT
+C3  min/max of one argument stops iterating it                  5 failed  CAUGHT
+C4  sum stops refusing a string start                           1 failed  CAUGHT
+C5  len stops sharing iterableItems                             6 failed  CAUGHT
+N3  min/max with no arguments raises the other exception type   1 failed  CAUGHT
 
-N1  need() stops rejecting a missing argument at all           0 failed  NOT CAUGHT
-N2  need()'s message becomes a literal                         0 failed  NOT CAUGHT
-N4  int's ignored second argument becomes a different value    0 failed  NOT CAUGHT
-N4b int silently consumes a THIRD argument as well             0 failed  NOT CAUGHT
-N5  float's zero-argument default changes                      0 failed  NOT CAUGHT
-N6  set() stops refusing an iterable entirely                  0 failed  NOT CAUGHT
-N7  set's defer moves to two args, one-arg set stops deferring 0 failed  NOT CAUGHT
-N8  set's defer becomes an arity TypeError for BOTH shapes     0 failed  NOT CAUGHT
-N9  str returns its SECOND argument on the decoding path       0 failed  NOT CAUGHT
-N10 str's zero-argument default stops being the empty string   0 failed  NOT CAUGHT
+N1  need() stops rejecting a missing argument at all            0 failed  NOT CAUGHT
+N2  need()'s message becomes a literal                          0 failed  NOT CAUGHT
+N4  int's ignored second argument becomes a different value     0 failed  NOT CAUGHT
+N4b int silently consumes a THIRD argument as well              0 failed  NOT CAUGHT
+N5  float's zero-argument default changes                       0 failed  NOT CAUGHT
+N6  set() stops refusing an iterable entirely                   0 failed  NOT CAUGHT
+N7  set's defer moves to two args, one-arg set stops deferring  0 failed  NOT CAUGHT
+N8  set's defer becomes an arity TypeError for BOTH shapes      0 failed  NOT CAUGHT
+N9  str returns its SECOND argument on the decoding path        0 failed  NOT CAUGHT
+N10 str's zero-argument default stops being the empty string    0 failed  NOT CAUGHT
+N11 a one-argument set silently returns empty for a NON-iterable 0 failed NOT CAUGHT
+N12 a repr arity fix also rejects the legal single argument     0 failed  NOT CAUGHT
+N13 a two-argument set is silently accepted instead of refused  0 failed  NOT CAUGHT
 
 pristine sha256 fa636de8284dc00c -> restored fa636de8284dc00c  IDENTICAL
-post-restore gate                                             0 failed | 51 passed
-caught 6   not caught 10
+post-restore gate                                              0 failed | 51 passed
+caught 6   not caught 13
 ```
 
-The five mutations added for this revision are all NOT CAUGHT:
+### The three added in revision 2 are shaped as BAD FIXES, not as regressions
 
-- **N7 and N8** move the set boundary in each direction independently. Neither
-  is visible, so the gate cannot see the one-argument defer or the two-argument
-  arity error — the collapse is unguarded from both sides.
-- **N4b** shows the three-argument surplus is unguarded as well as the base, so
-  a candidate that settles the second argument can leave the third silently
-  consumed and stay green.
-- **N9** lets `str` return its second argument on the decoding path with 51
-  cells green.
-- **N10** changes `str()`'s zero-argument result and nothing notices.
+0095 §4.5 asks for mutations proving a candidate cannot quietly overshoot. A
+census that only asks "can the gate see a break" never asks the question a
+candidate actually creates.
 
-### A defect in this battery, found and fixed during the revision
+- **N11** — the one-argument defer swallows the non-iterable case by returning
+  an empty set instead. NOT CAUGHT, so the gate cannot tell the designed defer
+  from the TypeError it is currently hiding.
+- **N13** — a two-argument set is accepted silently rather than refused. NOT
+  CAUGHT, so nothing stops a fix from folding 2+ into the defer.
+- **N12** — a repr arity fix that also rejects the legal single argument. NOT
+  CAUGHT, because `repr` has zero cells in the gate. This is the mutation that
+  makes the `repr(42)` census row load-bearing rather than decorative.
 
-The first run of the revised battery printed `caught 5` and, above it, one line
-saying C5's anchor did not match. **C5 was skipped and the summary still stood.**
-The cause: anchors in the harness are joined with LF, the checkout is CRLF, and
-a multi-line anchor therefore cannot match. In 0088 it did match, because the
-first text-mode run had rewritten the file to LF before the anchor was applied —
-the bug and the condition that hid it were the same bug.
+### A defect in this battery, found and fixed in revision 1
 
-Two fixes: anchors are now rewritten to the file's own newline before matching,
-and any anchor that fails to match makes the whole run exit non-zero with an
-explicit statement that the counts are over a smaller population than claimed.
-A skipped mutation is not "not caught"; it is not measured.
+The first revised run printed `caught 5` above a line saying C5's anchor did not
+match: C5 was skipped and the summary still stood. Anchors are joined with LF,
+the checkout is CRLF, so a multi-line anchor cannot match — and in 0088 it
+matched only because an earlier text-mode pass had rewritten the file to LF, so
+the bug and the condition hiding it were the same bug. Anchors are now rewritten
+to the file's own newline, and an unmatched anchor exits non-zero saying the
+counts are over a smaller population than claimed. A skipped mutation is not
+"not caught"; it is not measured, and those are three outcomes, not two.
 
 ### The pristine hash differs from 0088 and the content does not
-
-0088 recorded pristine `63321fefe898ea7c`; this run records `fa636de8284dc00c`.
-Same file, same content:
 
 ```
 worktree bytes now            fa636de8284dc00c   (CRLF, 1483 line endings, 0 bare LF)
@@ -196,78 +211,50 @@ same content, LF-normalised   63321fefe898ea7c   = the number recorded in 0088
 git blob (authoritative)      c21d5960e8ead8299ae5df5e09c796639e52e3f0
 ```
 
+Computed, not assumed.
+
 ---
 
-## 5. `int(x, base)` — the implement-or-defer decision
+## 5. `int(x, base)` — defer, per 0095 CONCUR
 
-0091 asks for cost, reachable shapes, oracle and NotMeasured. I recommend
-**defer**, and the case is below rather than the conclusion alone.
+Recorded here for closure; the evidence is unchanged from revision 1.
 
-### Reachable shapes
-
-Across all 741 corpus programs, counting top-level arguments at every builtin
-call site by balancing parentheses, with comments and string literals removed:
+**Reachable shapes.** `callsites-006.py` counts top-level arguments at every
+builtin call site across all 741 corpus programs by balancing parentheses, with
+comments and string literals removed and a printed witness for every count that
+is not one argument:
 
 ```
-int    1 arg: 1464                       with a base: 0
-str    1 arg: 12968                      with 2+:     0
-set    1 arg: 7                          with 2+:     0
+int    1 arg: 1464     with a base: 0
+str    1 arg: 12968    with 2+:     0
+set    1 arg: 7        with 2+:     0
 sum    1 arg: 53   2 args: 3
 min    1 arg: 25   3 args: 1
 max    1 arg: 38   2 args: 3   3 args: 1
 ```
 
-Every non-one-argument count has a printed witness. The 2- and 3-argument `sum`,
-`min` and `max` sites are `sum(daily, 100)`, `min(3, 7, 5)`, `max(2, 2.0)` —
-all shapes CPython accepts. **There is no call to `int` with a base anywhere in
-the corpus**, and no call to any builtin that CPython would reject. That is the
-0088 finding restated on a second population: the corpus is written by someone
-who writes correct calls, so like `builtin-shapes.test.ts` it cannot exercise
-the arity contract.
+Every non-one-argument site is a shape CPython accepts. There is no call to
+`int` with a base anywhere in the corpus, and no call to any builtin that
+CPython would reject — the 0088 finding restated on a second population.
 
-A regex cannot produce this table. `int((a-b)/c)` and `def add_int(n, cent_i)`
-both contain `int(` followed by a comma. The counter also got two things wrong
-on its first run and both are recorded in its source: an argument that is
-entirely bracketed never set the "an argument was present" flag, and `{}` was
-untracked so set literals leaked their commas.
+**Cost of implementing**: bases 0 and 2-36, prefix inference, underscores,
+whitespace, sign, and two exact message families — a wider surface than the one
+`need()` already gets wrong, which is N2 in this same census.
+**Cost of deferring**: one condition and one `Unsupported` with a reason.
+**Why defer is smaller**: `int("101",2) -> 101` is the only wrong value in
+thirty rows; defer converts a wrong value into a stated refusal, implement
+converts it into a right value plus an untested message surface. Implementing
+is not foreclosed.
 
-### Cost of implementing
+**Order, independent of the choice**: `int(x, base, third)` must be an arity
+TypeError before the two-argument policy applies. N4b shows the gate cannot see
+that today.
 
-Bases 0 and 2 through 36; prefix inference when base is 0; underscore
-separators; leading and trailing whitespace; sign; and two exact message
-families, `invalid literal for int() with base N: '...'` and `int() can't
-convert non-string with explicit base`. That is a wider exact-message surface
-than the one `need()` already gets wrong by sharing a single sentence across
-four callers — which is finding N2 in this same census.
-
-### Cost of deferring
-
-One condition and one `Unsupported` with a reason. The mechanism exists, is
-already used for `set(iterable)`, and 0088 measured that it terminates the run
-as `eml:run:incomplete` correctly rather than as a silent pass.
-
-### What each leaves NotMeasured
-
-Deferring leaves the entire base contract unmeasured **and says so**.
-Implementing leaves nothing unmeasured but adds thirty-five bases of message
-surface that nothing in the corpus or the gate would exercise, which is the
-condition under which the other message defects in this census arose.
-
-### Why defer is the smaller and safer change
-
-`int("101", 2)` returning `101` is the only **wrong value** in twenty-eight
-rows. Deferring converts a wrong value into a refusal. Implementing converts it
-into a right value plus a new untested message surface. Refusing to model
-something and silently answering wrongly are the two outcomes this census
-exists to separate, and defer moves this cell from the second to the first.
-
-Implementing remains open and is not foreclosed by deferring first.
-
-### Independent of the choice
-
-`int(x, base, third)` must be an arity TypeError before either policy applies.
-N4b shows the gate cannot see that today, so it needs its own assertion
-whichever way the second argument is settled.
+**`str` 2-3, per 0095 §1**: the same principle is available — defer the bytes
+decoding path explicitly rather than implement its message surface — and `4+`
+must be an arity TypeError first either way. If that defer is adopted it joins
+`AUTHORIZED_DEFER` in the census, which is a one-line change to the classifier
+and is deliberately not made in advance of the decision.
 
 ---
 
@@ -275,14 +262,16 @@ whichever way the second argument is settled.
 
 - the base contract for `int(x, base)` — every base, prefix, underscore and sign rule, and both message families
 - the exact wording of every arity rejection, for every builtin, in both directions
-- `str` with a genuine bytes-like first argument and a real encoding, which is the path CPython's 2-3 argument form exists for
-- `repr` beyond zero and one argument
+- `str` with a genuine bytes-like first argument and a real encoding
+- `repr` beyond zero, one and surplus
 - whether `set(a, b)` should reject before or after conversion is modeled
-- evaluation order for the newly added shapes (measured for `abs` in 0088 and found to MATCH; not re-measured per shape here)
+- evaluation order for the shapes added in revisions 1 and 2 (measured for `abs` in 0088, MATCH)
+- the value-type Cartesian product, explicitly excluded per 0095 §4
 
 ## 7. Boundaries
 
 No product change, no candidate, no merge, no release, no deploy. 005 is not
 reopened; 007-022, the registry, the trace error outcome contract and PR #3 /
 #4 are untouched. The monitor ledger isolation landed separately as `127c961`
-and is not part of this artifact.
+(EMLP-RELAY-0092, re-verified at 0094) and is not part of this artifact. The
+baseline-isolation candidate authorized at 0091 §2 has not been started.

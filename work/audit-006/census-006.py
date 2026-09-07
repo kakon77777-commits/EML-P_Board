@@ -30,6 +30,7 @@ SHAPES = [
     ("abs surplus",          "abs(1, 2)"),
     ("len zero args",        "len()"),
     ("len surplus",          "len([1], 2)"),
+    ("repr one arg legal",   "repr(42)"),
     ("repr zero args",       "repr()"),
     ("repr surplus",         "repr(1, 2)"),
     ("str zero args",        "str()"),
@@ -49,6 +50,7 @@ SHAPES = [
     ("float surplus",        "float(1, 2)"),
     ("set zero args",        "set()"),
     ("set from an iterable", "set([1, 2])"),
+    ("set one non-iterable", "set(1)"),
     ("set two args",         "set(1, 2)"),
     ("min zero args",        "min()"),
     ("max zero args",        "max()"),
@@ -71,51 +73,95 @@ def run(rel):
     return out
 
 
-def classify(out):
-    """(interp, cpython, verdict). Verdict distinguishes the three outcomes."""
+def run_cpython(rel):
+    """CPython's answer, obtained WITHOUT the interpreter.
+
+    `eml run` transpiles and executes via real python, so it still answers for a
+    shape the interpreter defers on. Before EMLP-RELAY-0095 this census wrote
+    "(not compared)" in the CPython column of every defer row - which is a fact
+    about the harness (no eml:equiv event was emitted) reported as if it were a
+    fact about the contract. A missing oracle is not an absent obligation.
+    """
+    r = subprocess.run(["npx", "tsx", "packages/cli/src/index.ts", "run", rel], **KW)
+    out = NL.join(l for l in ((r.stdout or "") + (r.stderr or "")).split(NL)
+                  if l.strip() and not l.startswith("npm warn"))
+    return out.strip()
+
+
+# Deferring is legitimate only where it is a stated design decision. Everything
+# else that defers is deferring by accident, and the two must not share a row
+# type: one is a documented boundary, the other is a defect wearing its costume.
+AUTHORIZED_DEFER = {"set from an iterable"}
+
+
+def classify(out, label, rel):
+    """(interp, cpython, outcome, authorized).
+
+    Two axes, deliberately. `outcome` is what the run did; `authorized` is
+    whether that is allowed. Collapsing them into one MATCH/DIVERGE/DEFER total
+    lets an unexpected defer be counted as though it were a designed one.
+    """
     unsup = [l for l in out.split(NL) if '"type":"eml:unsupported"' in l or '"unsupported"' in l]
     equiv = [l for l in out.split(NL) if '"type":"eml:equiv"' in l]
     if equiv:
         ev = json.loads(equiv[0])
         a, e = (ev.get("actual") or "").strip(), (ev.get("expected") or "").strip()
-        return a, e, ("MATCH" if a == e else "DIVERGE")
+        ok = a == e
+        return a, e, ("MATCH" if ok else "DIVERGE"), ("OK" if ok else "DEFECT")
     # A deferral ends the run with eml:run:incomplete, not eml:run:done. Reading
     # only for `done` classified an honest defer as "no comparison", which
     # understates the interpreter: refusing to model something and silently
     # answering wrongly are the two outcomes this census exists to separate.
-    if unsup:
+    deferred = bool(unsup)
+    if not deferred:
+        done = [l for l in out.split(NL) if '"type":"eml:run:done"' in l]
+        deferred = bool(done) and not json.loads(done[0]).get("ok")
+    if deferred:
         reason = ""
-        m = re.search(r'"reason":"([^"]{0,60})', unsup[0])
-        if m:
-            reason = m.group(1)
-        return "(defer) " + reason, "(not compared)", "DEFER"
-    done = [l for l in out.split(NL) if '"type":"eml:run:done"' in l]
-    if done and not json.loads(done[0]).get("ok"):
-        return "(deferred)", "(not compared)", "DEFER"
-    return "(no equiv event)", "(none)", "NO-COMPARE"
+        if unsup:
+            m = re.search(r'"reason":"([^"]{0,60})', unsup[0])
+            if m:
+                reason = m.group(1)
+        designed = label in AUTHORIZED_DEFER
+        return ("(defer) " + reason,
+                run_cpython(rel),
+                "DESIGNED_DEFER" if designed else "UNEXPECTED_DEFER",
+                "OK" if designed else "DEFECT")
+    return "(no equiv event)", "(none)", "NO-COMPARE", "DEFECT"
 
 
 os.makedirs(TMP, exist_ok=True)
 print("=" * 88)
 print("EMLP-AUDIT-006 census - the shapes tests/builtin-shapes.test.ts never tries")
 print("=" * 88)
-print("%-22s %-34s %-34s %s" % ("shape", "interpreter", "real CPython", "verdict"))
+print("%-22s %-32s %-32s %-17s %s" % ("shape", "interpreter", "real CPython", "outcome", "allowed"))
 rows = []
 for label, call in SHAPES:
     stem = re.sub(r"[^a-z0-9]+", "_", label.lower())
     path = os.path.join(TMP, stem + ".eml")
     io.open(path, "w", encoding="utf-8", newline=NL).write(TEMPLATE % call)
-    out = run(".census006/" + stem + ".eml")
-    a, e, verdict = classify(out)
-    rows.append({"shape": label, "call": call, "interp": a, "cpython": e, "verdict": verdict})
-    print("%-22s %-34s %-34s %s" % (label[:22], a[:34], e[:34], verdict))
+    rel = ".census006/" + stem + ".eml"
+    out = run(rel)
+    a, e, outcome, allowed = classify(out, label, rel)
+    rows.append({"shape": label, "call": call, "interp": a, "cpython": e,
+                 "outcome": outcome, "authorized": allowed})
+    print("%-22s %-32s %-32s %-17s %s" % (label[:22], a[:32], e[:32], outcome, allowed))
 
 print()
-d = sum(1 for r in rows if r["verdict"] == "DIVERGE")
-m = sum(1 for r in rows if r["verdict"] == "MATCH")
-f = sum(1 for r in rows if r["verdict"] == "DEFER")
-n = sum(1 for r in rows if r["verdict"] == "NO-COMPARE")
-print("  MATCH %d   DIVERGE %d   DEFER %d   NO-COMPARE %d   of %d shapes" % (m, d, f, n, len(rows)))
+# Raw outcomes: what the runs did. Kept, because it is the measurement.
+counts = {}
+for r in rows:
+    counts[r["outcome"]] = counts.get(r["outcome"], 0) + 1
+print("  raw outcomes   " + "   ".join("%s %d" % (k, counts[k]) for k in sorted(counts)))
+# Closure: whether each outcome is allowed. This is the axis a candidate has to
+# move, and it is NOT the axis above: a defer that nobody designed is a defect
+# that happens to have deferred.
+ok = sum(1 for r in rows if r["authorized"] == "OK")
+bad = len(rows) - ok
+print("  closure        OK %d   DEFECT %d   of %d shapes" % (ok, bad, len(rows)))
+print()
+print("  designed defers   : " + ", ".join(r["shape"] for r in rows if r["outcome"] == "DESIGNED_DEFER"))
+print("  unexpected defers : " + ", ".join(r["shape"] for r in rows if r["outcome"] == "UNEXPECTED_DEFER"))
 io.open(r"D:\Ai\work together\EML-P_Board\work\audit-006\census-006.json", "w",
         encoding="utf-8", newline=NL).write(json.dumps(rows, ensure_ascii=False, indent=2))
 print()

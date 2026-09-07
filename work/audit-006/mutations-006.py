@@ -90,6 +90,21 @@ MUTATIONS = [
     ("N10", "str's zero-argument default stops being the empty string",
      "        if (args.length === 0) return STR('');",
      "        if (args.length === 0) return STR('x');"),
+
+    # --- added per EMLP-RELAY-0095 section 4.5 -------------------------------
+    # These three are shaped as BAD FIXES rather than as regressions. A census
+    # that only asks "can the gate see a break" does not ask the question a
+    # candidate creates: can the gate see a fix that is too broad. Each of
+    # these is what a plausible repair looks like when it overshoots.
+    ("N11", "a one-argument set silently returns empty for a NON-iterable",
+     "        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');\n        return SET([]);",
+     "        if (args.length === 1 && !iterableItems(args[0])) return SET([]);\n        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');\n        return SET([]);"),
+    ("N12", "a repr arity fix also rejects the legal single argument",
+     "        const rv = need(args, 0, name);",
+     "        if (args.length !== 0) throw new PyError('TypeError', `${name}() takes exactly one argument (${args.length} given)`);\n        const rv = need(args, 0, name);"),
+    ("N13", "a two-argument set is silently accepted instead of deferred or refused",
+     "        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');\n        return SET([]);",
+     "        if (args.length > 1) return SET([]);\n        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');\n        return SET([]);"),
 ]
 
 

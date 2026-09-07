@@ -99,6 +99,24 @@
       "label": "str's zero-argument default stops being the empty string",
       "failed": 0,
       "passed": 51
+    },
+    {
+      "id": "N11",
+      "label": "a one-argument set silently returns empty for a NON-iterable",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N12",
+      "label": "a repr arity fix also rejects the legal single argument",
+      "failed": 0,
+      "passed": 51
+    },
+    {
+      "id": "N13",
+      "label": "a two-argument set is silently accepted instead of deferred or refused",
+      "failed": 0,
+      "passed": 51
     }
   ],
   "pristine_sha256": "fa636de8284dc00c2d125270127d15e2ce619bd0e5c855771b5c959bf84dacb2",
