@@ -1,0 +1,154 @@
+[
+  {
+    "id": "C1",
+    "kind": "same",
+    "label": "abs of a float loses its sign handling",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "C2",
+    "kind": "same",
+    "label": "int stops truncating toward zero",
+    "failed": 2,
+    "passed": 79,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "C3",
+    "kind": "same",
+    "label": "min/max of one argument stops iterating it",
+    "failed": 7,
+    "passed": 74,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "C4",
+    "kind": "same",
+    "label": "sum stops refusing a string start",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "C5",
+    "kind": "same",
+    "label": "len stops sharing iterableItems",
+    "failed": 6,
+    "passed": 75,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N3",
+    "kind": "same",
+    "label": "min/max empty-iterable raises the other exception type",
+    "failed": 3,
+    "passed": 78,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N5",
+    "kind": "same",
+    "label": "float's zero-argument default changes",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N10",
+    "kind": "same",
+    "label": "str's zero-argument default stops being the empty string",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N1",
+    "kind": "re-anchored",
+    "label": "the shared arity rejection stops rejecting",
+    "failed": 6,
+    "passed": 75,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N2",
+    "kind": "re-anchored",
+    "label": "the shared arity message becomes a literal",
+    "failed": 6,
+    "passed": 75,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N4",
+    "kind": "re-anchored",
+    "label": "int stops deferring on a base and silently ignores it again",
+    "failed": 3,
+    "passed": 78,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N4b",
+    "kind": "re-anchored",
+    "label": "int's three-argument surplus stops being rejected",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N6",
+    "kind": "re-anchored",
+    "label": "set stops declining an iterable and answers instead",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N7",
+    "kind": "re-anchored",
+    "label": "set's non-iterable check disappears",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N8",
+    "kind": "re-anchored",
+    "label": "set's designed defer becomes an arity TypeError",
+    "failed": 2,
+    "passed": 79,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N11",
+    "kind": "re-anchored",
+    "label": "set returns empty for a NON-iterable instead of refusing",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N13",
+    "kind": "re-anchored",
+    "label": "set's arity decision is swallowed by the conversion path",
+    "failed": 1,
+    "passed": 80,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N9",
+    "kind": "re-anchored",
+    "label": "str stops deferring the decoding path and answers with arg 0",
+    "failed": 2,
+    "passed": 79,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "N12",
+    "kind": "re-anchored",
+    "label": "a repr arity fix also rejects the legal single argument",
+    "failed": 11,
+    "passed": 70,
+    "status": "CAUGHT"
+  }
+]

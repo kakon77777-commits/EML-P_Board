@@ -1,0 +1,220 @@
+diff --git a/packages/interp/src/index.ts b/packages/interp/src/index.ts
+index c21d596..37cecb0 100644
+--- a/packages/interp/src/index.ts
++++ b/packages/interp/src/index.ts
+@@ -868,7 +868,51 @@ function runProgram(
+     return result;
+   };
+ 
++  // CPython's argument-count contract, per builtin, in CPython's own wording
++  // and carrying the actual N. Harvested from real CPython 3.14.5 rather than
++  // recalled, because the sentences differ per builtin AND per direction:
++  // `sum()` says "takes at least 1 positional argument" while a surplus sum
++  // says "takes at most 2 arguments", and `float` says "expected at most 1
++  // argument, got N" where `abs` says "takes exactly one argument (N given)".
++  // One shared sentence cannot be right for more than one of them, which is
++  // what need() was doing for four callers at once (EMLP-AUDIT-006, N2).
++  //
++  // This runs BEFORE any per-builtin body, so an arity decision is never
++  // reached through a conversion question or a deferral.
++  const checkArity = (name: string, n: number): void => {
++    switch (name) {
++      case 'abs': case 'len': case 'repr':
++        if (n !== 1) throw new PyError('TypeError', `${name}() takes exactly one argument (${n} given)`);
++        return;
++      case 'sum':
++        if (n === 0) throw new PyError('TypeError', 'sum() takes at least 1 positional argument (0 given)');
++        if (n > 2) throw new PyError('TypeError', `sum() takes at most 2 arguments (${n} given)`);
++        return;
++      case 'float':
++        if (n > 1) throw new PyError('TypeError', `float expected at most 1 argument, got ${n}`);
++        return;
++      case 'int':
++        if (n > 2) throw new PyError('TypeError', `int expected at most 2 arguments, got ${n}`);
++        return;
++      case 'str':
++        if (n > 3) throw new PyError('TypeError', `str expected at most 3 arguments, got ${n}`);
++        return;
++      case 'set':
++        if (n > 1) throw new PyError('TypeError', `set expected at most 1 argument, got ${n}`);
++        return;
++      case 'min': case 'max':
++        // Zero arguments and an empty iterable are different errors of
++        // different TYPES, and they used to reach one line inside minmax().
++        // Deciding arity here is what splits them.
++        if (n === 0) throw new PyError('TypeError', `${name} expected at least 1 argument, got 0`);
++        return;
++      default:
++        return;
++    }
++  };
++
+   const callBuiltin = (name: string, args: PyVal[]): PyVal => {
++    checkArity(name, args.length);
+     switch (name) {
+       case 'abs': {
+         const a = need(args, 0, name);
+@@ -887,13 +931,33 @@ function runProgram(
+         throw new PyError('TypeError', `object of type '${typeName(a)}' has no len()`);
+       }
+       case 'set': {
+-        // Zero-arg only — `{}` is a dict literal (Python parity), so `set()` is
+-        // the only way to spell an empty set; `set(iterable)` conversion is out
+-        // of scope this round.
+-        if (args.length > 0) throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');
+-        return SET([]);
++        // FOUR regions, not two. `{}` is a dict literal (Python parity), so
++        // `set()` is the only way to spell an empty set; one iterable argument
++        // is a deliberate deferral; one NON-iterable argument is a TypeError
++        // CPython raises before any conversion question arises; and two or more
++        // is an arity error, already decided in checkArity above.
++        //
++        // A single `args.length > 0` collapsed all of these into one deferral
++        // whose stated reason - "converting an iterable to a set" - was true for
++        // exactly one of them and described something that was not happening
++        // for the other two.
++        if (args.length === 0) return SET([]);
++        const sa = args[0]!;
++        if (!iterableItems(sa)) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);
++        throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');
+       }
+       case 'int': {
++        // Exactly two arguments is the base form, and it is DEFERRED rather
++        // than implemented. Measured: 0 of 741 corpus programs reach it, while
++        // implementing it means bases 0 and 2-36, prefix inference for base 0,
++        // underscore separators, whitespace, sign, and two exact message
++        // families - a wider untested message surface than the one this audit
++        // is about. Silently dropping the base produced the only wrong VALUE in
++        // the census; a stated refusal is the smaller and honest change.
++        // Three or more arguments is an arity error, decided in checkArity.
++        if (args.length === 2) {
++          throw new Unsupported('int(x, base)', 'the base argument is not modeled yet');
++        }
+         const a = args[0] ?? INT(0n);
+         if (a.k === 'int') return a;
+         if (a.k === 'bool') return INT(a.v ? 1n : 0n);
+@@ -919,6 +983,15 @@ function runProgram(
+       }
+       case 'str': {
+         if (args.length === 0) return STR('');
++        // Two and three arguments are CPython's bytes-DECODING form, not a
++        // surplus: `str expected at most 3 arguments` begins at four, and this
++        // census originally filed str("a","b") under arity because the answer
++        // agreed with that conclusion. The decoding path is deferred rather
++        // than implemented, for the same reason as int's base: 0 of 741 corpus
++        // programs reach it and it is a message surface, not a value.
++        if (args.length >= 2) {
++          throw new Unsupported('str(object, encoding[, errors])', 'the bytes decoding path is not modeled yet');
++        }
+         const sv = need(args, 0, name);
+         guardSetOrder(sv, 'str()');
+         return STR(pyStr(sv));
+diff --git a/tests/builtin-shapes.test.ts b/tests/builtin-shapes.test.ts
+index 7a7c763..b154394 100644
+--- a/tests/builtin-shapes.test.ts
++++ b/tests/builtin-shapes.test.ts
+@@ -163,3 +163,104 @@ describe('order-sensitive set operations defer instead of guessing', () => {
+     expect(r.output).toBe('3\n');
+   });
+ });
++
++/**
++ * ARITY CONTRACT — EMLP-AUDIT-006.
++ *
++ * The census above covers argument SHAPES a test author would write, which is
++ * the same population `builtin-shapes.test.ts` already had: calls with the
++ * right number of arguments. Nineteen mutations showed the consequence — the
++ * arity check that four builtins depend on could be deleted entirely and all
++ * 51 cells stayed green.
++ *
++ * Every row here prints `str(e)`, so the comparison is against CPython's exact
++ * MESSAGE. A row that printed only the exception's type name would pass against
++ * any wording at all, and the wording is the point: CPython says "takes exactly
++ * one argument (2 given)" for abs, "expected at most 1 argument, got 2" for
++ * float, and "takes at least 1 positional argument" for a zero-argument sum
++ * where the surplus form says "takes at most 2 arguments". One shared sentence
++ * cannot be right for more than one of them.
++ *
++ * The legal rows — repr(42), str(), str("a"), int(), int("10"), float(), set()
++ * — are positive controls, not filler. Without them a fix that rejected every
++ * call to a builtin would turn this whole block green.
++ */
++const arityProbe = (call: string) =>
++  `try:\n    str(${call})^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\nexcept ValueError as e:\n    "ValueError: " + str(e)^0`;
++
++describe.skipIf(!PYTHON)('builtin arity contract ≡ CPython (EMLP-AUDIT-006)', () => {
++  const CALLS: [string, string][] = [
++    // exactly-one builtins, both directions, and the N in the message
++    ['abs with no arguments', 'abs()'],
++    ['abs with two arguments', 'abs(1, 2)'],
++    ['len with no arguments', 'len()'],
++    ['len with two arguments', 'len([1], 2)'],
++    ['repr with one argument is LEGAL', 'repr(42)'],
++    ['repr with no arguments', 'repr()'],
++    ['repr with two arguments', 'repr(1, 2)'],
++    // str: 0 and 1 legal, 4+ is where arity begins
++    ['str with no arguments is LEGAL', 'str()'],
++    ['str with one argument is LEGAL', 'str("a")'],
++    ['str with four arguments', 'str("a", "b", "c", "d")'],
++    // sum: the two directions are worded differently in CPython
++    ['sum with no arguments', 'sum()'],
++    ['sum with three arguments', 'sum([1], 0, 9)'],
++    // int: 0 and 1 legal, 3+ is arity, decided before the base question
++    ['int with no arguments is LEGAL', 'int()'],
++    ['int with one argument is LEGAL', 'int("10")'],
++    ['int with three arguments', 'int("10", 2, 3)'],
++    // float
++    ['float with no arguments is LEGAL', 'float()'],
++    ['float with two arguments', 'float(1, 2)'],
++    // set: four regions, and the arity decision precedes the conversion one
++    ['set with no arguments is LEGAL', 'set()'],
++    ['set with one NON-iterable argument', 'set(1)'],
++    ['set with two arguments', 'set(1, 2)'],
++    // min/max: no arguments and an empty iterable are different TYPES
++    ['min with no arguments', 'min()'],
++    ['max with no arguments', 'max()'],
++    ['min of an empty iterable', 'min([])'],
++    ['max of an empty iterable', 'max([])'],
++  ];
++  for (const [label, call] of CALLS) {
++    it(label, () => {
++      const src = arityProbe(call);
++      const fwd = transpileEmlToPython(src);
++      expect(fwd.ok, `forward transpile failed: ${fwd.diagnostics.map((d) => d.code).join(',')}`).toBe(true);
++      expect(eml(src), `EML interpreter disagrees with CPython for: ${call}`).toBe(cpython(fwd.python));
++    });
++  }
++});
++
++/**
++ * The six shapes that DEFER rather than answer — EMLP-AUDIT-006, per the policy
++ * fixed in EMLP-RELAY-0097 section 2.
++ *
++ * `int(x, base)` at exactly two arguments and `str(object, encoding[, errors])`
++ * at exactly two or three are declined rather than implemented: no corpus
++ * program reaches either (0 of 741 call sites), and implementing them means a
++ * message surface nothing exercises. Declining is not the same as answering
++ * wrongly, and before this change `int("101", 2)` returned 101 where CPython
++ * returns 5 — the only wrong VALUE in the census.
++ *
++ * These rows exist so a later "improvement" that makes any of them merely
++ * ANSWER goes red instead of passing quietly.
++ */
++describe('the shapes that decline rather than guess (EMLP-AUDIT-006)', () => {
++  const mustDefer: [string, string][] = [
++    ['int with a base', 'str(int("101", 2))^0'],
++    ['int with a base that rejects the literal', 'str(int("5", 2))^0'],
++    ['int with a base and a non-string', 'str(int(1, 2))^0'],
++    ['str with two arguments is the decoding path', 'str(str("a", "b"))^0'],
++    ['str with three arguments is the decoding path', 'str(str("a", "b", "c"))^0'],
++    ['set from an iterable', 'str(set([1, 2]))^0'],
++  ];
++  for (const [label, src] of mustDefer) {
++    it(label, () => {
++      const r = interpret(src);
++      expect(r.ok, 'should not claim success').toBe(false);
++      expect(r.unsupported.length, 'should record why it declined').toBeGreaterThan(0);
++      expect(r.error, 'declining is not an error — it is a deferral').toBeUndefined();
++    });
++  }
++});

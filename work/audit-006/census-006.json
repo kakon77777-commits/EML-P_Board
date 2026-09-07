@@ -2,34 +2,34 @@
   {
     "shape": "abs zero args",
     "call": "abs()",
-    "interp": "TypeError: abs() missing required argument",
+    "interp": "TypeError: abs() takes exactly one argument (0 given)",
     "cpython": "TypeError: abs() takes exactly one argument (0 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "abs surplus",
     "call": "abs(1, 2)",
-    "interp": "1",
+    "interp": "TypeError: abs() takes exactly one argument (2 given)",
     "cpython": "TypeError: abs() takes exactly one argument (2 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "len zero args",
     "call": "len()",
-    "interp": "TypeError: len() missing required argument",
+    "interp": "TypeError: len() takes exactly one argument (0 given)",
     "cpython": "TypeError: len() takes exactly one argument (0 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "len surplus",
     "call": "len([1], 2)",
-    "interp": "1",
+    "interp": "TypeError: len() takes exactly one argument (2 given)",
     "cpython": "TypeError: len() takes exactly one argument (2 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "repr one arg legal",
@@ -42,18 +42,18 @@
   {
     "shape": "repr zero args",
     "call": "repr()",
-    "interp": "TypeError: repr() missing required argument",
+    "interp": "TypeError: repr() takes exactly one argument (0 given)",
     "cpython": "TypeError: repr() takes exactly one argument (0 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "repr surplus",
     "call": "repr(1, 2)",
-    "interp": "1",
+    "interp": "TypeError: repr() takes exactly one argument (2 given)",
     "cpython": "TypeError: repr() takes exactly one argument (2 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "str zero args",
@@ -74,42 +74,42 @@
   {
     "shape": "str two args",
     "call": "str(\"a\", \"b\")",
-    "interp": "a",
+    "interp": "(defer) the bytes decoding path is not modeled yet",
     "cpython": "TypeError: decoding str is not supported",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
   },
   {
     "shape": "str three args",
     "call": "str(\"a\", \"b\", \"c\")",
-    "interp": "a",
+    "interp": "(defer) the bytes decoding path is not modeled yet",
     "cpython": "TypeError: decoding str is not supported",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
   },
   {
     "shape": "str four args",
     "call": "str(\"a\", \"b\", \"c\", \"d\")",
-    "interp": "a",
+    "interp": "TypeError: str expected at most 3 arguments, got 4",
     "cpython": "TypeError: str expected at most 3 arguments, got 4",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "sum zero args",
     "call": "sum()",
-    "interp": "TypeError: sum() missing required argument",
+    "interp": "TypeError: sum() takes at least 1 positional argument (0 given)",
     "cpython": "TypeError: sum() takes at least 1 positional argument (0 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "sum three args",
     "call": "sum([1], 0, 9)",
-    "interp": "1",
+    "interp": "TypeError: sum() takes at most 2 arguments (3 given)",
     "cpython": "TypeError: sum() takes at most 2 arguments (3 given)",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "int zero args",
@@ -130,34 +130,34 @@
   {
     "shape": "int with base 2",
     "call": "int(\"101\", 2)",
-    "interp": "101",
+    "interp": "(defer) the base argument is not modeled yet",
     "cpython": "5",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
   },
   {
     "shape": "int three args",
     "call": "int(\"10\", 2, 3)",
-    "interp": "10",
+    "interp": "TypeError: int expected at most 2 arguments, got 3",
     "cpython": "TypeError: int expected at most 2 arguments, got 3",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "int base rejects",
     "call": "int(\"5\", 2)",
-    "interp": "5",
+    "interp": "(defer) the base argument is not modeled yet",
     "cpython": "ValueError: invalid literal for int() with base 2: '5'",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
   },
   {
     "shape": "int non-str with base",
     "call": "int(1, 2)",
-    "interp": "1",
+    "interp": "(defer) the base argument is not modeled yet",
     "cpython": "TypeError: int() can't convert non-string with explicit base",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
   },
   {
     "shape": "float zero args",
@@ -170,10 +170,10 @@
   {
     "shape": "float surplus",
     "call": "float(1, 2)",
-    "interp": "1.0",
+    "interp": "TypeError: float expected at most 1 argument, got 2",
     "cpython": "TypeError: float expected at most 1 argument, got 2",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "set zero args",
@@ -194,34 +194,34 @@
   {
     "shape": "set one non-iterable",
     "call": "set(1)",
-    "interp": "(defer) converting an iterable to a set is not modeled yet",
+    "interp": "TypeError: 'int' object is not iterable",
     "cpython": "TypeError: 'int' object is not iterable",
-    "outcome": "UNEXPECTED_DEFER",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "set two args",
     "call": "set(1, 2)",
-    "interp": "(defer) converting an iterable to a set is not modeled yet",
+    "interp": "TypeError: set expected at most 1 argument, got 2",
     "cpython": "TypeError: set expected at most 1 argument, got 2",
-    "outcome": "UNEXPECTED_DEFER",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "min zero args",
     "call": "min()",
-    "interp": "ValueError: min() iterable argument is empty",
+    "interp": "TypeError: min expected at least 1 argument, got 0",
     "cpython": "TypeError: min expected at least 1 argument, got 0",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "max zero args",
     "call": "max()",
-    "interp": "ValueError: max() iterable argument is empty",
+    "interp": "TypeError: max expected at least 1 argument, got 0",
     "cpython": "TypeError: max expected at least 1 argument, got 0",
-    "outcome": "DIVERGE",
-    "authorized": "DEFECT"
+    "outcome": "MATCH",
+    "authorized": "OK"
   },
   {
     "shape": "min empty iterable",

@@ -18,7 +18,10 @@ rather than by reading the CLI's `ok` flag.
 import io, json, os, re, subprocess, sys
 
 NL = chr(10)
-ROOT = r"D:\Ai\work together\EML"
+# The tree under measurement. Defaults to the product; pass a worktree path
+# to measure a candidate with the SAME harness, so the two numbers are
+# comparable by construction rather than by assertion.
+ROOT = sys.argv[1] if len(sys.argv) > 1 else r"D:\Ai\work together\EML"
 TMP = os.path.join(ROOT, ".census006")
 KW = dict(capture_output=True, text=True, shell=True, encoding="utf-8", errors="replace", cwd=ROOT)
 
@@ -91,7 +94,15 @@ def run_cpython(rel):
 # Deferring is legitimate only where it is a stated design decision. Everything
 # else that defers is deferring by accident, and the two must not share a row
 # type: one is a documented boundary, the other is a defect wearing its costume.
-AUTHORIZED_DEFER = {"set from an iterable"}
+# Fixed by EMLP-RELAY-0097 section 2: int at exactly two arguments and str at
+# exactly two or three are honest deferrals, not implementations. Six
+# equivalence classes in this population. Everything else that defers is
+# deferring by accident.
+AUTHORIZED_DEFER = {
+    "set from an iterable",
+    "int with base 2", "int base rejects", "int non-str with base",
+    "str two args", "str three args",
+}
 
 
 def classify(out, label, rel):

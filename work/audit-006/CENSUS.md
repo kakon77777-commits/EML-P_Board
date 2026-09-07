@@ -264,7 +264,11 @@ and is deliberately not made in advance of the decision.
 - the exact wording of every arity rejection, for every builtin, in both directions
 - `str` with a genuine bytes-like first argument and a real encoding
 - `repr` beyond zero, one and surplus
-- whether `set(a, b)` should reject before or after conversion is modeled
+- (removed per EMLP-RELAY-0097 section 4: this document listed whether
+  `set(a, b)` rejects before or after conversion as unmeasured, while its
+  own section 2 had already fixed it as an arity TypeError at 2+. One
+  document, open and closed. The candidate decides it in checkArity before
+  the set body runs, and mutation N13 fails if that ordering moves.)
 - evaluation order for the shapes added in revisions 1 and 2 (measured for `abs` in 0088, MATCH)
 - the value-type Cartesian product, explicitly excluded per 0095 §4
 
