@@ -143,23 +143,34 @@ revision 1.
 
 ```
 targeted gate      0 failed | 86 passed
-full suite         70 files / 3399 tests passed
+full suite         70 files / 3444 tests passed      (product at 45e27a4: 3409, delta +35)
 typecheck          exit 0
 monitor            756 programs / 27 constructs / no drift
                    note: interp changed and so did its conformance test - reviewed
-census, candidate  OK 35 / DEFECT 0
-census, product    OK 13 / DEFECT 22
+census, candidate  OK 35 / DEFECT 0    census-006-v2-candidate.json
+census, product    OK 13 / DEFECT 22   census-006-product-45e27a4.json
 restore            71b7a6b600b3810b -> 71b7a6b600b3810b  IDENTICAL
 product tree       0 modified tracked files
 ```
 
-**One honest note about `pnpm test`.** It exits 1 with
+**Correction, per EMLP-RELAY-0102 §4.** The first version of this document said
+`3399`. That number is real but belongs to a different tree: it was measured
+while the worktree was still at `127c961` with 741 corpus programs, and I did
+not re-run the full suite after rebasing onto `45e27a4`. 3399 = the old 3364
+baseline + 35; the number for this snapshot is 3364 + 45 + 35 = **3444**,
+re-measured here directly. **A measurement is only valid for the tree state it
+was taken in, and re-running the targeted parts after a rebase is not the same
+as re-running everything.**
+
+**`pnpm test` and the worker timeout.** On this machine it exits 1 with
 `[vitest-worker]: Timeout calling "onTaskUpdate"` while reporting 70/70 files
-and every test passing. That is the standing operational issue recorded in
-`docs/PROGRESS.md` (task #399), not a failure of this candidate: measured today,
-**the product at `45e27a4` exits 1 the same way**, with 70/70 passing. I had
-been reporting "full suite green" from the summary line through a pipe, which
-swallowed the exit code; it is stated properly here.
+and every test passing — four observations today, twice on the candidate and
+twice on the product at `45e27a4`, so it does not distinguish them. The auditor
+got **exit 0 on both trees in two fresh runs**. So it is environmental and
+nondeterministic, not a fixed property of this candidate and not a fixed
+property of the repository either; the earlier wording called it "the standing
+issue, exit 1", which is more than the evidence supports. What is stable across
+all six runs is that every test passes.
 
 ## 7. NotMeasured
 
@@ -179,7 +190,30 @@ swallowed the exit code; it is stated properly here.
 - the wording of the two deferral reasons against any external standard
 - the value-type Cartesian product, excluded by 0097 §4
 
-## 8. Boundaries
+## 8. Provenance of the census files, per EMLP-RELAY-0102 §5
+
+The census harness used to write one fixed `census-006.json`, so the committed
+artifact described **whichever run happened last** rather than the run the
+document beside it was about. In `503117e` that file held the *v1* expanded
+snapshot — `OK 32 / DEFECT 3`, the three protocol rows DIVERGE — while READY and
+0101 claimed v2's `OK 35 / DEFECT 0`. The prose was right and the machine
+evidence next to it was not, which is worse than either being wrong alone.
+
+Fixed at the cause: the harness now names its output after the tree it measured
+(`census-006.py <root> <label>`), so a generic name cannot be produced. Three
+files, each saying what it is:
+
+```
+census-006-v1-expanded.json      v1 on the 35 shapes    OK 32 / DEFECT 3
+census-006-v2-candidate.json     v2 on the 35 shapes    OK 35 / DEFECT 0
+census-006-product-45e27a4.json  product, same harness  OK 13 / DEFECT 22
+```
+
+The v1 file is kept deliberately: it is the measurement that shows what the
+auditor's hidden V caught, and deleting it would remove the evidence for the
+finding this revision exists to answer.
+
+## 9. Boundaries
 
 Candidate only. Not landed, not merged, not released, not deployed. 005 is not
 reopened; 007-022, the registry, the trace error outcome contract and PR #3 /

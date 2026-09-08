@@ -1,0 +1,282 @@
+[
+  {
+    "shape": "abs zero args",
+    "call": "abs()",
+    "interp": "TypeError: abs() takes exactly one argument (0 given)",
+    "cpython": "TypeError: abs() takes exactly one argument (0 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "abs surplus",
+    "call": "abs(1, 2)",
+    "interp": "TypeError: abs() takes exactly one argument (2 given)",
+    "cpython": "TypeError: abs() takes exactly one argument (2 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "len zero args",
+    "call": "len()",
+    "interp": "TypeError: len() takes exactly one argument (0 given)",
+    "cpython": "TypeError: len() takes exactly one argument (0 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "len surplus",
+    "call": "len([1], 2)",
+    "interp": "TypeError: len() takes exactly one argument (2 given)",
+    "cpython": "TypeError: len() takes exactly one argument (2 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "repr one arg legal",
+    "call": "repr(42)",
+    "interp": "42",
+    "cpython": "42",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "repr zero args",
+    "call": "repr()",
+    "interp": "TypeError: repr() takes exactly one argument (0 given)",
+    "cpython": "TypeError: repr() takes exactly one argument (0 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "repr surplus",
+    "call": "repr(1, 2)",
+    "interp": "TypeError: repr() takes exactly one argument (2 given)",
+    "cpython": "TypeError: repr() takes exactly one argument (2 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "str zero args",
+    "call": "str()",
+    "interp": "",
+    "cpython": "",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "str one arg legal",
+    "call": "str(\"a\")",
+    "interp": "a",
+    "cpython": "a",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "str two args",
+    "call": "str(\"a\", \"b\")",
+    "interp": "(defer) the bytes decoding path is not modeled yet",
+    "cpython": "TypeError: decoding str is not supported",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "str three args",
+    "call": "str(\"a\", \"b\", \"c\")",
+    "interp": "(defer) the bytes decoding path is not modeled yet",
+    "cpython": "TypeError: decoding str is not supported",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "str four args",
+    "call": "str(\"a\", \"b\", \"c\", \"d\")",
+    "interp": "TypeError: str expected at most 3 arguments, got 4",
+    "cpython": "TypeError: str expected at most 3 arguments, got 4",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "sum zero args",
+    "call": "sum()",
+    "interp": "TypeError: sum() takes at least 1 positional argument (0 given)",
+    "cpython": "TypeError: sum() takes at least 1 positional argument (0 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "sum three args",
+    "call": "sum([1], 0, 9)",
+    "interp": "TypeError: sum() takes at most 2 arguments (3 given)",
+    "cpython": "TypeError: sum() takes at most 2 arguments (3 given)",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int zero args",
+    "call": "int()",
+    "interp": "0",
+    "cpython": "0",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int one arg legal",
+    "call": "int(\"10\")",
+    "interp": "10",
+    "cpython": "10",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int with base 2",
+    "call": "int(\"101\", 2)",
+    "interp": "(defer) the base argument is not modeled yet",
+    "cpython": "5",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int three args",
+    "call": "int(\"10\", 2, 3)",
+    "interp": "TypeError: int expected at most 2 arguments, got 3",
+    "cpython": "TypeError: int expected at most 2 arguments, got 3",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int base rejects",
+    "call": "int(\"5\", 2)",
+    "interp": "(defer) the base argument is not modeled yet",
+    "cpython": "ValueError: invalid literal for int() with base 2: '5'",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "int non-str with base",
+    "call": "int(1, 2)",
+    "interp": "(defer) the base argument is not modeled yet",
+    "cpython": "TypeError: int() can't convert non-string with explicit base",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "float zero args",
+    "call": "float()",
+    "interp": "0.0",
+    "cpython": "0.0",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "float surplus",
+    "call": "float(1, 2)",
+    "interp": "TypeError: float expected at most 1 argument, got 2",
+    "cpython": "TypeError: float expected at most 1 argument, got 2",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "set zero args",
+    "call": "set()",
+    "interp": "set()",
+    "cpython": "set()",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "set from an iterable",
+    "call": "set([1, 2])",
+    "interp": "(defer) converting an iterable to a set is not modeled yet",
+    "cpython": "{1, 2}",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "set one non-iterable",
+    "call": "set(1)",
+    "interp": "TypeError: 'int' object is not iterable",
+    "cpython": "TypeError: 'int' object is not iterable",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "set two args",
+    "call": "set(1, 2)",
+    "interp": "TypeError: set expected at most 1 argument, got 2",
+    "cpython": "TypeError: set expected at most 1 argument, got 2",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "min zero args",
+    "call": "min()",
+    "interp": "TypeError: min expected at least 1 argument, got 0",
+    "cpython": "TypeError: min expected at least 1 argument, got 0",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "max zero args",
+    "call": "max()",
+    "interp": "TypeError: max expected at least 1 argument, got 0",
+    "cpython": "TypeError: max expected at least 1 argument, got 0",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "min empty iterable",
+    "call": "min([])",
+    "interp": "ValueError: min() iterable argument is empty",
+    "cpython": "ValueError: min() iterable argument is empty",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "max empty iterable",
+    "call": "max([])",
+    "interp": "ValueError: max() iterable argument is empty",
+    "cpython": "ValueError: max() iterable argument is empty",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, no protocol",
+    "call": "class Plain:\n    def hello(self):\n        return 1\n\nPlain() => p\ntry:\n    str(len(set(p)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Plain' object is not iterable",
+    "cpython": "TypeError: 'Plain' object is not iterable",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, __len__ only",
+    "call": "class Sized:\n    def __len__(self):\n        return 3\n\nSized() => z\ntry:\n    str(len(set(z)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Sized' object is not iterable",
+    "cpython": "TypeError: 'Sized' object is not iterable",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, __iter__",
+    "call": "class EmptyIter:\n    def __iter__(self):\n        return self\n    def __next__(self):\n        raise StopIteration()\n\nEmptyIter() => it\ntry:\n    str(len(set(it)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "(defer) iterating a user-defined object is not modeled yet",
+    "cpython": "0",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, __getitem__",
+    "call": "class Seq:\n    def __getitem__(self, i):\n        if i < 3:\n            return i\n        raise IndexError()\n\nSeq() => s\ntry:\n    str(len(set(s)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "(defer) iterating a user-defined object is not modeled yet",
+    "cpython": "3",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, bound attr",
+    "call": "class Assigned:\n    def marker(self):\n        return 0\n\ndef pick(self, i):\n    if i < 2:\n        return i\n    raise IndexError()\n\npick => Assigned.__getitem__\nAssigned() => a\ntry:\n    str(len(set(a)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "(defer) iterating a user-defined object is not modeled yet",
+    "cpython": "2",
+    "outcome": "DESIGNED_DEFER",
+    "authorized": "OK"
+  }
+]

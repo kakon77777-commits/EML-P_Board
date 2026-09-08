@@ -22,6 +22,12 @@ NL = chr(10)
 # to measure a candidate with the SAME harness, so the two numbers are
 # comparable by construction rather than by assertion.
 ROOT = sys.argv[1] if len(sys.argv) > 1 else r"D:\Ai\work together\EML"
+# The output is named after WHAT WAS MEASURED, not after this script. Writing a
+# fixed census-006.json made the committed artifact describe whichever run
+# happened last: EMLP-RELAY-0102 found the v1 snapshot sitting under a generic
+# name beside prose claiming v2's numbers. A file whose name does not say which
+# tree it came from will eventually be read as the tree the reader expects.
+LABEL = sys.argv[2] if len(sys.argv) > 2 else os.path.basename(ROOT.rstrip("\\/")).lower()
 TMP = os.path.join(ROOT, ".census006")
 KW = dict(capture_output=True, text=True, shell=True, encoding="utf-8", errors="replace", cwd=ROOT)
 
@@ -185,7 +191,8 @@ print("  closure        OK %d   DEFECT %d   of %d shapes" % (ok, bad, len(rows))
 print()
 print("  designed defers   : " + ", ".join(r["shape"] for r in rows if r["outcome"] == "DESIGNED_DEFER"))
 print("  unexpected defers : " + ", ".join(r["shape"] for r in rows if r["outcome"] == "UNEXPECTED_DEFER"))
-io.open(r"D:\Ai\work together\EML-P_Board\work\audit-006\census-006.json", "w",
+OUTNAME = "census-006-" + LABEL + ".json"
+io.open(os.path.join(r"D:\Ai\work together\EML-P_Board\work\audit-006", OUTNAME), "w",
         encoding="utf-8", newline=NL).write(json.dumps(rows, ensure_ascii=False, indent=2))
 print()
-print("census-006.json")
+print(OUTNAME)
