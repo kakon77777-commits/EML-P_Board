@@ -75,15 +75,19 @@ MUTATIONS = [
     ("N6", "re-anchored", "set stops declining an iterable and answers instead",
      "        throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');",
      "        return SET([]);"),
-    ("N7", "re-anchored", "set's non-iterable check disappears",
-     "        if (!iterableItems(sa)) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);",
-     "        if (false) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);"),
+    # Re-anchored a second time: v2 replaced the line these attached to. The
+    # semantics are unchanged - one drops the refusal, the other answers where
+    # it should refuse - and they now attach to the three-valued decision's
+    # final branch.
+    ("N7", "re-anchored", "the non-iterable refusal becomes a deferral",
+     "        throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);",
+     "        throw new Unsupported('set(iterable)', 'not modeled');"),
     ("N8", "re-anchored", "set's designed defer becomes an arity TypeError",
      "        if (args.length === 0) return SET([]);",
      "        if (args.length === 0) return SET([]);\n        throw new PyError('TypeError', 'set expected at most 1 argument');"),
-    ("N11", "re-anchored", "set returns empty for a NON-iterable instead of refusing",
-     "        if (!iterableItems(sa)) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);",
-     "        if (!iterableItems(sa)) return SET([]);"),
+    ("N11", "re-anchored", "a non-iterable silently returns an empty set",
+     "        throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);",
+     "        return SET([]);"),
     # N13 is the property 0097 §3.3 names: the arity decision must not be
     # swallowed by the conversion path. Moving set's arity threshold by one lets
     # set(1,2) fall into the body and be answered as a conversion question.
@@ -100,6 +104,26 @@ MUTATIONS = [
     ("N12", "re-anchored", "a repr arity fix also rejects the legal single argument",
      "      case 'abs': case 'len': case 'repr':",
      "      case 'abs': case 'len':\n      case 'repr':\n        throw new PyError('TypeError', `${name}() takes exactly one argument (${n} given)`);\n      case '__never__':"),
+
+    # ---- v2, per EMLP-RELAY-0100 section "v2 的有限 closure 建議" ----------
+    # The iterability decision is three-valued, so it has two boundaries and
+    # each can be moved in two directions. V1 is candidate v1's actual defect,
+    # kept as a mutation so it can never come back silently.
+    ("V1", "v2", "every instance is refused as non-iterable (candidate v1's defect)",
+     "        if (sa.k === 'instance' && hasIterationProtocol(sa)) {",
+     "        if (false) {"),
+    ("V2", "v2", "every instance is deferred, including ones CPython refuses",
+     "        if (sa.k === 'instance' && hasIterationProtocol(sa)) {",
+     "        if (sa.k === 'instance') {"),
+    ("V3", "v2", "only the class BODY is searched, so a runtime binding is missed",
+     "      (n) => findMethod(v.classDef as ClassDef, n) !== undefined || v.classAttrs.has(n));",
+     "      (n) => findMethod(v.classDef as ClassDef, n) !== undefined);"),
+    ("V4", "v2", "only the class ATTRIBUTES are searched, so a method definition is missed",
+     "      (n) => findMethod(v.classDef as ClassDef, n) !== undefined || v.classAttrs.has(n));",
+     "      (n) => v.classAttrs.has(n));"),
+    ("V5", "v2", "any dunder counts as an iteration protocol, including __len__",
+     "    ['__iter__', '__getitem__'].some(",
+     "    ['__iter__', '__getitem__', '__len__'].some("),
 ]
 
 

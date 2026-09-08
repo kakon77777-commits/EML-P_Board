@@ -868,6 +868,29 @@ function runProgram(
     return result;
   };
 
+  /**
+   * Would CPython iterate this instance? That is NOT the same question as
+   * "is this one of the shapes this interpreter models", and conflating the
+   * two is the defect EMLP-RELAY-0100 caught in candidate v1: `iterableItems`
+   * returns null for every user instance, and v1 read that null as "not
+   * iterable" and said so out loud.
+   *
+   * A user class supplies iteration through `__iter__`/`__next__` or through
+   * the sequence protocol's `__getitem__`, and either can arrive as a method
+   * in the class body or as a class attribute bound at runtime. This
+   * interpreter does not dispatch dunders automatically (EML-LANG-2026 §7e)
+   * while the Python it generates does, so wherever such an entry point
+   * EXISTS the honest answer is a deferral. Claiming the object is not
+   * iterable is a wrong answer where the product's blanket defer was right.
+   *
+   * Both lookups are needed: searching only the class body misses a runtime
+   * `C.__getitem__ = f` binding, and searching only the class attributes
+   * misses an ordinary `def __getitem__` in the body.
+   */
+  const hasIterationProtocol = (v: Extract<PyVal, { k: 'instance' }>): boolean =>
+    ['__iter__', '__getitem__'].some(
+      (n) => findMethod(v.classDef as ClassDef, n) !== undefined || v.classAttrs.has(n));
+
   // CPython's argument-count contract, per builtin, in CPython's own wording
   // and carrying the actual N. Harvested from real CPython 3.14.5 rather than
   // recalled, because the sentences differ per builtin AND per direction:
@@ -941,10 +964,18 @@ function runProgram(
         // whose stated reason - "converting an iterable to a set" - was true for
         // exactly one of them and described something that was not happening
         // for the other two.
+        // Three-valued, not boolean. v1 asked `iterableItems(sa)` and treated
+        // its null as "not iterable"; that answers only whether the shape is
+        // directly modeled here. See hasIterationProtocol above.
         if (args.length === 0) return SET([]);
         const sa = args[0]!;
-        if (!iterableItems(sa)) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);
-        throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');
+        if (iterableItems(sa)) {
+          throw new Unsupported('set(iterable)', 'converting an iterable to a set is not modeled yet');
+        }
+        if (sa.k === 'instance' && hasIterationProtocol(sa)) {
+          throw new Unsupported('set(iterable)', 'iterating a user-defined object is not modeled yet');
+        }
+        throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);
       }
       case 'int': {
         // Exactly two arguments is the base form, and it is DEFERRED rather

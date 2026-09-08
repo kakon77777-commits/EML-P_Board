@@ -238,5 +238,45 @@
     "cpython": "ValueError: max() iterable argument is empty",
     "outcome": "MATCH",
     "authorized": "OK"
+  },
+  {
+    "shape": "instance, no protocol",
+    "call": "class Plain:\n    def hello(self):\n        return 1\n\nPlain() => p\ntry:\n    str(len(set(p)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Plain' object is not iterable",
+    "cpython": "TypeError: 'Plain' object is not iterable",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, __len__ only",
+    "call": "class Sized:\n    def __len__(self):\n        return 3\n\nSized() => z\ntry:\n    str(len(set(z)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Sized' object is not iterable",
+    "cpython": "TypeError: 'Sized' object is not iterable",
+    "outcome": "MATCH",
+    "authorized": "OK"
+  },
+  {
+    "shape": "instance, __iter__",
+    "call": "class EmptyIter:\n    def __iter__(self):\n        return self\n    def __next__(self):\n        raise StopIteration()\n\nEmptyIter() => it\ntry:\n    str(len(set(it)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'EmptyIter' object is not iterable",
+    "cpython": "0",
+    "outcome": "DIVERGE",
+    "authorized": "DEFECT"
+  },
+  {
+    "shape": "instance, __getitem__",
+    "call": "class Seq:\n    def __getitem__(self, i):\n        if i < 3:\n            return i\n        raise IndexError()\n\nSeq() => s\ntry:\n    str(len(set(s)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Seq' object is not iterable",
+    "cpython": "3",
+    "outcome": "DIVERGE",
+    "authorized": "DEFECT"
+  },
+  {
+    "shape": "instance, bound attr",
+    "call": "class Assigned:\n    def marker(self):\n        return 0\n\ndef pick(self, i):\n    if i < 2:\n        return i\n    raise IndexError()\n\npick => Assigned.__getitem__\nAssigned() => a\ntry:\n    str(len(set(a)))^0\nexcept TypeError as e:\n    \"TypeError: \" + str(e)^0\n",
+    "interp": "TypeError: 'Assigned' object is not iterable",
+    "cpython": "2",
+    "outcome": "DIVERGE",
+    "authorized": "DEFECT"
   }
 ]

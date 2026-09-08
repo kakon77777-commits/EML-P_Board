@@ -4,7 +4,7 @@
     "kind": "same",
     "label": "abs of a float loses its sign handling",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -12,7 +12,7 @@
     "kind": "same",
     "label": "int stops truncating toward zero",
     "failed": 2,
-    "passed": 79,
+    "passed": 84,
     "status": "CAUGHT"
   },
   {
@@ -20,7 +20,7 @@
     "kind": "same",
     "label": "min/max of one argument stops iterating it",
     "failed": 7,
-    "passed": 74,
+    "passed": 79,
     "status": "CAUGHT"
   },
   {
@@ -28,7 +28,7 @@
     "kind": "same",
     "label": "sum stops refusing a string start",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -36,7 +36,7 @@
     "kind": "same",
     "label": "len stops sharing iterableItems",
     "failed": 6,
-    "passed": 75,
+    "passed": 80,
     "status": "CAUGHT"
   },
   {
@@ -44,7 +44,7 @@
     "kind": "same",
     "label": "min/max empty-iterable raises the other exception type",
     "failed": 3,
-    "passed": 78,
+    "passed": 83,
     "status": "CAUGHT"
   },
   {
@@ -52,7 +52,7 @@
     "kind": "same",
     "label": "float's zero-argument default changes",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -60,7 +60,7 @@
     "kind": "same",
     "label": "str's zero-argument default stops being the empty string",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -68,7 +68,7 @@
     "kind": "re-anchored",
     "label": "the shared arity rejection stops rejecting",
     "failed": 6,
-    "passed": 75,
+    "passed": 80,
     "status": "CAUGHT"
   },
   {
@@ -76,7 +76,7 @@
     "kind": "re-anchored",
     "label": "the shared arity message becomes a literal",
     "failed": 6,
-    "passed": 75,
+    "passed": 80,
     "status": "CAUGHT"
   },
   {
@@ -84,7 +84,7 @@
     "kind": "re-anchored",
     "label": "int stops deferring on a base and silently ignores it again",
     "failed": 3,
-    "passed": 78,
+    "passed": 83,
     "status": "CAUGHT"
   },
   {
@@ -92,7 +92,7 @@
     "kind": "re-anchored",
     "label": "int's three-argument surplus stops being rejected",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -100,31 +100,31 @@
     "kind": "re-anchored",
     "label": "set stops declining an iterable and answers instead",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
     "id": "N7",
     "kind": "re-anchored",
-    "label": "set's non-iterable check disappears",
-    "failed": 1,
-    "passed": 80,
+    "label": "the non-iterable refusal becomes a deferral",
+    "failed": 3,
+    "passed": 83,
     "status": "CAUGHT"
   },
   {
     "id": "N8",
     "kind": "re-anchored",
     "label": "set's designed defer becomes an arity TypeError",
-    "failed": 2,
+    "failed": 7,
     "passed": 79,
     "status": "CAUGHT"
   },
   {
     "id": "N11",
     "kind": "re-anchored",
-    "label": "set returns empty for a NON-iterable instead of refusing",
-    "failed": 1,
-    "passed": 80,
+    "label": "a non-iterable silently returns an empty set",
+    "failed": 3,
+    "passed": 83,
     "status": "CAUGHT"
   },
   {
@@ -132,7 +132,7 @@
     "kind": "re-anchored",
     "label": "set's arity decision is swallowed by the conversion path",
     "failed": 1,
-    "passed": 80,
+    "passed": 85,
     "status": "CAUGHT"
   },
   {
@@ -140,7 +140,7 @@
     "kind": "re-anchored",
     "label": "str stops deferring the decoding path and answers with arg 0",
     "failed": 2,
-    "passed": 79,
+    "passed": 84,
     "status": "CAUGHT"
   },
   {
@@ -148,7 +148,47 @@
     "kind": "re-anchored",
     "label": "a repr arity fix also rejects the legal single argument",
     "failed": 11,
-    "passed": 70,
+    "passed": 75,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "V1",
+    "kind": "v2",
+    "label": "every instance is refused as non-iterable (candidate v1's defect)",
+    "failed": 3,
+    "passed": 83,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "V2",
+    "kind": "v2",
+    "label": "every instance is deferred, including ones CPython refuses",
+    "failed": 2,
+    "passed": 84,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "V3",
+    "kind": "v2",
+    "label": "only the class BODY is searched, so a runtime binding is missed",
+    "failed": 1,
+    "passed": 85,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "V4",
+    "kind": "v2",
+    "label": "only the class ATTRIBUTES are searched, so a method definition is missed",
+    "failed": 2,
+    "passed": 84,
+    "status": "CAUGHT"
+  },
+  {
+    "id": "V5",
+    "kind": "v2",
+    "label": "any dunder counts as an iteration protocol, including __len__",
+    "failed": 1,
+    "passed": 85,
     "status": "CAUGHT"
   }
 ]

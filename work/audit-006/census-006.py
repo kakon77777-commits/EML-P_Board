@@ -59,6 +59,13 @@ SHAPES = [
     ("max zero args",        "max()"),
     ("min empty iterable",   "min([])"),
     ("max empty iterable",   "max([])"),
+
+    # class-protocol rows, per EMLP-RELAY-0100
+    ('instance, no protocol', 'class Plain:\n    def hello(self):\n        return 1\n\nPlain() => p\ntry:\n    str(len(set(p)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\n'),
+    ('instance, __len__ only', 'class Sized:\n    def __len__(self):\n        return 3\n\nSized() => z\ntry:\n    str(len(set(z)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\n'),
+    ('instance, __iter__', 'class EmptyIter:\n    def __iter__(self):\n        return self\n    def __next__(self):\n        raise StopIteration()\n\nEmptyIter() => it\ntry:\n    str(len(set(it)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\n'),
+    ('instance, __getitem__', 'class Seq:\n    def __getitem__(self, i):\n        if i < 3:\n            return i\n        raise IndexError()\n\nSeq() => s\ntry:\n    str(len(set(s)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\n'),
+    ('instance, bound attr', 'class Assigned:\n    def marker(self):\n        return 0\n\ndef pick(self, i):\n    if i < 2:\n        return i\n    raise IndexError()\n\npick => Assigned.__getitem__\nAssigned() => a\ntry:\n    str(len(set(a)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0\n'),
 ]
 
 TEMPLATE = ("try:" + NL +
@@ -102,6 +109,7 @@ AUTHORIZED_DEFER = {
     "set from an iterable",
     "int with base 2", "int base rejects", "int non-str with base",
     "str two args", "str three args",
+    "instance, __iter__", "instance, __getitem__", "instance, bound attr",
 }
 
 
@@ -150,7 +158,11 @@ rows = []
 for label, call in SHAPES:
     stem = re.sub(r"[^a-z0-9]+", "_", label.lower())
     path = os.path.join(TMP, stem + ".eml")
-    io.open(path, "w", encoding="utf-8", newline=NL).write(TEMPLATE % call)
+    # A shape may be a whole PROGRAM rather than a call: the class-protocol
+    # rows added for EMLP-RELAY-0100 need a class definition, which the
+    # single-expression template cannot carry.
+    src = call if NL in call else TEMPLATE % call
+    io.open(path, "w", encoding="utf-8", newline=NL).write(src)
     rel = ".census006/" + stem + ".eml"
     out = run(rel)
     a, e, outcome, allowed = classify(out, label, rel)

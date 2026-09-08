@@ -1,0 +1,9 @@
+class Plain:
+    def hello(self):
+        return 1
+
+Plain() => p
+try:
+    str(len(set(p)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0

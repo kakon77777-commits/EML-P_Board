@@ -1,0 +1,11 @@
+class Seq:
+    def __getitem__(self, i):
+        if i < 3:
+            return i
+        raise IndexError()
+
+Seq() => s
+try:
+    str(len(set(s)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0

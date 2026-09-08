@@ -246,6 +246,58 @@ describe.skipIf(!PYTHON)('builtin arity contract ≡ CPython (EMLP-AUDIT-006)', 
  * These rows exist so a later "improvement" that makes any of them merely
  * ANSWER goes red instead of passing quietly.
  */
+/**
+ * ITERABILITY OF A USER INSTANCE — EMLP-AUDIT-006 v2, from EMLP-RELAY-0100.
+ *
+ * Candidate v1 asked `iterableItems(x)` and read its null as "not iterable".
+ * That function answers whether the shape is one the interpreter models
+ * directly; it does not answer whether CPython would iterate the object
+ * through a user class's `__iter__`/`__next__` or the sequence protocol's
+ * `__getitem__`. The two sets are not equal, and v1 turned the product's
+ * honest deferral into a wrong answer for every instance in the gap.
+ *
+ * The decision is three-valued, so it needs rows on both sides of both
+ * boundaries. The two TypeError rows are the negative controls: without them a
+ * fix that deferred on every instance would look correct.
+ */
+describe.skipIf(!PYTHON)('a user instance is iterable when CPython says so (EMLP-AUDIT-006)', () => {
+  const NOT_ITERABLE: [string, string][] = [
+    ['an instance with no iteration protocol',
+     'class Plain:\n    def hello(self):\n        return 1\n\nPlain() => p\ntry:\n    str(len(set(p)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0'],
+    ['an instance with only __len__',
+     'class Sized:\n    def __len__(self):\n        return 3\n\nSized() => z\ntry:\n    str(len(set(z)))^0\nexcept TypeError as e:\n    "TypeError: " + str(e)^0'],
+  ];
+  for (const [label, src] of NOT_ITERABLE) {
+    it(label, () => {
+      const fwd = transpileEmlToPython(src);
+      expect(fwd.ok, `forward transpile failed: ${fwd.diagnostics.map((d) => d.code).join(',')}`).toBe(true);
+      expect(eml(src), `EML interpreter disagrees with CPython for: ${label}`).toBe(cpython(fwd.python));
+    });
+  }
+});
+
+describe('an instance that CPython WOULD iterate is deferred, not refused (EMLP-AUDIT-006)', () => {
+  const MUST_DEFER: [string, string][] = [
+    ['a class defining __iter__ and __next__',
+     'class EmptyIter:\n    def __iter__(self):\n        return self\n    def __next__(self):\n        raise StopIteration()\n\nEmptyIter() => it\nstr(len(set(it)))^0'],
+    ['a class defining __getitem__',
+     'class Seq:\n    def __getitem__(self, i):\n        if i < 3:\n            return i\n        raise IndexError()\n\nSeq() => s\nstr(len(set(s)))^0'],
+    // The entry point can also arrive at runtime. Searching only the class
+    // body misses this one; searching only the class attributes misses the
+    // two above.
+    ['a __getitem__ bound as a class attribute',
+     'class Assigned:\n    def marker(self):\n        return 0\n\ndef pick(self, i):\n    if i < 2:\n        return i\n    raise IndexError()\n\npick => Assigned.__getitem__\nAssigned() => a\nstr(len(set(a)))^0'],
+  ];
+  for (const [label, src] of MUST_DEFER) {
+    it(label, () => {
+      const r = interpret(src);
+      expect(r.ok, 'should not claim success').toBe(false);
+      expect(r.unsupported.length, 'should record why it declined').toBeGreaterThan(0);
+      expect(r.error, 'declining is not an error — it is a deferral').toBeUndefined();
+    });
+  }
+});
+
 describe('the shapes that decline rather than guess (EMLP-AUDIT-006)', () => {
   const mustDefer: [string, string][] = [
     ['int with a base', 'str(int("101", 2))^0'],

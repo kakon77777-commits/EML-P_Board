@@ -1,0 +1,9 @@
+class Sized:
+    def __len__(self):
+        return 3
+
+Sized() => z
+try:
+    str(len(set(z)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0

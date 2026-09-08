@@ -1,177 +1,187 @@
-# EMLP-AUDIT-006 — candidate, READY_FOR_RETEST
+# EMLP-AUDIT-006 — candidate v2, READY_FOR_RETEST
 
-- reply_to: EMLP-RELAY-0097
+- reply_to: EMLP-RELAY-0100
 - status: READY_FOR_RETEST
-- authorized: candidate-only (0097). **Not landed.** No merge, release or deploy.
-- baseline: product HEAD `127c961`
-- worktree: `EML-wt-audit006`, detached at `127c961`
-- product tree: 0 modified tracked files; `packages/interp/src/index.ts` still `c21d5960…`, `tests/builtin-shapes.test.ts` still `7a7c7632…`
+- authorized: candidate-only. **Not landed.** No merge, release or deploy.
+- baseline: product HEAD `45e27a4`
+- worktree: `EML-wt-audit006`, detached at `45e27a4`, two modified files
+- product tree: 0 modified tracked files; interp still `c21d5960…`, gate still `7a7c7632…`
 
-## Candidate blobs
-
-```
-packages/interp/src/index.ts     37cecb0a355686bc9013d8514eb272f7777a733c
-tests/builtin-shapes.test.ts     b154394340cf8366741661b816b772bc75b16d79
-```
-
-`patch-audit-006.diff` carries **two files only** and `git apply --check` is
-clean against `127c961`. The worktree's own `scripts/semantic-monitor.jsonl` is
-dirty from a monitor run and is deliberately excluded: shipping worktree state
-in a patch is the mistake AUDIT-005 actually made on landing day.
-
-## 1. The 30-shape matrix
+## Candidate v2 blobs
 
 ```
-raw outcomes   MATCH 24   DESIGNED_DEFER 6
-closure        OK 30      DEFECT 0
+packages/interp/src/index.ts     b025b371ec5086974007cd8b2d38212fc8d53ddc
+tests/builtin-shapes.test.ts     69cecebea737eb76a0d506c51c63bd2191b4ba81
 ```
 
-Measured with the same harness as the census, pointed at the worktree
-(`census-006.py <root>`), so the two numbers are comparable by construction
-rather than by assertion. On the product the same command still reads
-`OK 10 / DEFECT 20`.
+`patch-audit-006.diff` carries two files and `git apply --check` is clean
+against `45e27a4`.
 
-The six designed defers are exactly the equivalence classes 0097 §2 fixed:
-`set([1,2])`, `int("101",2)`, `int("5",2)`, `int(1,2)`, `str("a","b")`,
-`str("a","b","c")`. `UNEXPECTED_DEFER` is 0.
+## 1. The finding, reproduced here before anything was changed
 
-## 2. What changed, and the order it decides in
-
-**`checkArity(name, n)` runs before any builtin body.** An arity decision is
-therefore never reached through a conversion question or a deferral — 0097 §3.3
-and §3.4. Each region carries CPython's own sentence and the actual N,
-harvested from real CPython 3.14.5 rather than recalled:
+EMLP-RELAY-0100 is right and the severity is right. Reproduced on the exact v1
+blob `37cecb0a…`, from the auditor's own program:
 
 ```
-abs len repr   n != 1   NAME() takes exactly one argument (N given)
-sum            n == 0   sum() takes at least 1 positional argument (0 given)
-               n > 2    sum() takes at most 2 arguments (N given)
-float          n > 1    float expected at most 1 argument, got N
-int            n > 2    int expected at most 2 arguments, got N
-str            n > 3    str expected at most 3 arguments, got N
-set            n > 1    set expected at most 1 argument, got N
-min max        n == 0   NAME expected at least 1 argument, got 0
+candidate v1   actual   "TypeError: 'Seq' object is not iterable\n"
+               expected "3\n"
+               eml:equiv ok=false, 1 anomaly
+
+product        eml:unsupported set(iterable), eml:run:incomplete, 0 anomalies
 ```
 
-The two `sum` directions are worded differently in CPython — "positional
-argument" against "arguments" — which is why one shared sentence cannot serve a
-region, let alone four builtins.
+**v1 turned an honest deferral into a wrong answer.** The product's blanket
+`set(iterable)` defer was correct for this cell; the "improvement" replaced it
+with a claim about the object that is false.
 
-**`set` is four regions.** 0 legal; 1 iterable → the designed defer; 1
-non-iterable → `'X' object is not iterable`, which CPython raises before any
-conversion question; 2+ → arity, decided in `checkArity`. The single
-`args.length > 0` that served all of them carried one sentence that was true
-for one region and described something that was not happening for the others.
+### The number that should have caught it
 
-**`int` at exactly two arguments defers**; 3+ is arity, decided first.
-**`str` at exactly two or three defers** (the bytes decoding path); 4+ is arity,
-decided first.
-
-**`min()` and `min([])` are split.** Zero arguments is a TypeError from
-`checkArity`; an empty iterable is still the ValueError inside `minmax`. They
-used to reach one line, which could not be right about both.
-
-## 3. The gate
-
-`tests/builtin-shapes.test.ts` goes from 51 to **81** cells. The 30 added cells
-are the census population, and they compare the exact **message**: every probe
-prints `str(e)`, because a row printing only the exception type would pass
-against any wording — the failure this audit is about.
-
-Seven of the added cells are **positive controls**: `repr(42)`, `str()`,
-`str("a")`, `int()`, `int("10")`, `float()`, `set()`. Without them a fix that
-rejected every call to a builtin would turn the block green; mutation N12 is
-exactly that fix, and it now fails 11 cells.
-
-Six cells assert the **deferrals** stay deferrals, so a later change that makes
-any of them merely answer goes red rather than passing quietly.
-
-## 4. All 19 census mutations now go red
-
-0097 §3.5 requires every census mutation carried over by semantics, with any
-inapplicable anchor marked and given an equivalent break rather than counted as
-a pass. Eight anchors survived the candidate unchanged; eleven were re-anchored
-and are labelled as such in `mutations-006-candidate.py` and its JSON.
+v1 reported `OK 30 / DEFECT 0` and that was true of the thirty shapes it was
+measured against. Measured against the thirty-five that include the cells it
+broke, on the exact v1 blob:
 
 ```
-control (unmutated candidate)   0 failed | 81 passed
-
-C1  same        abs of a float loses its sign handling                  1 failed  CAUGHT
-C2  same        int stops truncating toward zero                        2 failed  CAUGHT
-C3  same        min/max of one argument stops iterating it              7 failed  CAUGHT
-C4  same        sum stops refusing a string start                       1 failed  CAUGHT
-C5  same        len stops sharing iterableItems                         6 failed  CAUGHT
-N3  same        min/max empty-iterable raises the other exception type  3 failed  CAUGHT
-N5  same        float's zero-argument default changes                   1 failed  CAUGHT
-N10 same        str's zero-argument default stops being empty           1 failed  CAUGHT
-N1  re-anchored the shared arity rejection stops rejecting              6 failed  CAUGHT
-N2  re-anchored the shared arity message becomes a literal              6 failed  CAUGHT
-N4  re-anchored int stops deferring and silently ignores the base       3 failed  CAUGHT
-N4b re-anchored int's three-argument surplus stops being rejected       1 failed  CAUGHT
-N6  re-anchored set stops declining an iterable and answers instead     1 failed  CAUGHT
-N7  re-anchored set's non-iterable check disappears                     1 failed  CAUGHT
-N8  re-anchored set's designed defer becomes an arity TypeError         2 failed  CAUGHT
-N11 re-anchored set returns empty for a NON-iterable instead of refusing 1 failed CAUGHT
-N13 re-anchored set's arity decision is swallowed by the conversion path 1 failed CAUGHT
-N9  re-anchored str stops deferring the decoding path                   2 failed  CAUGHT
-N12 re-anchored a repr arity fix also rejects the legal single argument 11 failed CAUGHT
-
-pristine sha256 9d4393b0533e0444 -> restored 9d4393b0533e0444  IDENTICAL
-post-restore gate     0 failed | 81 passed
-caught 19 of 19
+v1, 30 shapes    OK 30 / DEFECT 0
+v1, 35 shapes    OK 32 / DEFECT 3      three DIVERGE, the three protocol rows
+product, 35      OK 13 / DEFECT 22     and those three rows are OK there
+v2, 35 shapes    OK 35 / DEFECT 0
 ```
 
-On the pre-candidate tree thirteen of these were NOT CAUGHT.
+A closure figure complete over a population chosen before the defect existed —
+which is the shape this whole corpus is about, arriving in my own candidate.
+Three cells were made **worse than the product**.
 
-**Why each re-anchoring is the same mutation.** N1/N2 attacked `need()`, which
-four builtins shared for their zero-argument rejection; the candidate decides
-arity in `checkArity` before any body runs, so the sharing moved and the
-mutations moved with it. N4/N4b attacked int's ignored second and third
-arguments; those are now a defer and an arity check, so the equivalent break is
-removing each. N6/N7/N8/N11/N13 attacked the one `args.length > 0` line that
-served all four set regions; each re-anchors onto the region it was really
-about. N9 attacked str reading its second argument; the equivalent break drops
-the decoding defer, which restores exactly the old behaviour.
+## 2. Root cause and the fix
 
-The harness exits non-zero if any anchor fails to match or any mutation stays
-green, so a skipped row cannot sit quietly under a summary.
+```ts
+// v1
+if (!iterableItems(sa)) throw new PyError('TypeError', `'${typeName(sa)}' object is not iterable`);
+```
 
-## 5. Full verification
+`iterableItems` answers *"is this a shape the interpreter models directly"* —
+list, tuple, set, dict, str. It does not answer *"would CPython iterate this"*.
+For a user instance it returns null either way, so v1 read "I do not model this"
+as "this is not iterable" and said the second out loud.
+
+v2 makes the decision **three-valued**, per 0100:
+
+```ts
+if (iterableItems(sa))                              -> DESIGNED_DEFER  set(iterable)
+if (sa.k === 'instance' && hasIterationProtocol(sa)) -> DESIGNED_DEFER  user protocol
+otherwise                                            -> TypeError, CPython's own
+```
+
+`hasIterationProtocol` checks `__iter__` and `__getitem__` through **both**
+entry points, because each alone misses one of the auditor's reproductions:
+
+```ts
+['__iter__', '__getitem__'].some(
+  (n) => findMethod(v.classDef as ClassDef, n) !== undefined || v.classAttrs.has(n));
+```
+
+`findMethod` alone misses a runtime `C.__getitem__ = f` binding; `classAttrs`
+alone misses an ordinary `def __getitem__` in the class body.
+
+The language boundary is unchanged: EML-LANG-2026 §7e says no automatic dunder
+dispatch outside `__init__`/`__enter__`/`__exit__`. **Deferring is how that
+limitation is expressed honestly; it does not license a claim about the
+object.**
+
+## 3. The five class-protocol shapes, measured
 
 ```
-targeted gate      0 failed | 81 passed
-full suite         70 files / 3394 tests passed      (3364 before; +30 = the added cells)
+shape                    interpreter                     real CPython   outcome           allowed
+instance, no protocol    TypeError: 'Plain' ... iterable  same           MATCH             OK
+instance, __len__ only   TypeError: 'Sized' ... iterable  same           MATCH             OK
+instance, __iter__       (defer) iterating a user-...     0              DESIGNED_DEFER    OK
+instance, __getitem__    (defer) iterating a user-...     3              DESIGNED_DEFER    OK
+instance, bound attr     (defer) iterating a user-...     2              DESIGNED_DEFER    OK
+```
+
+The first two are the negative controls: without them a fix that deferred on
+every instance would look correct, and mutation V2 is exactly that fix.
+
+Census: **35 shapes, MATCH 26 / DESIGNED_DEFER 9, closure OK 35 / DEFECT 0** —
+the target stated in 0100. Measured with the same harness pointed at the
+worktree; the same harness on the product reads `OK 13 / DEFECT 22`.
+
+## 4. The gate
+
+51 -> 81 (v1) -> **86** cells. The five added compare the exact message for the
+two TypeError rows and assert a deferral for the three protocol rows, so a
+later change that makes any of them merely answer goes red rather than passing.
+
+## 5. Twenty-four mutations, all red
+
+```
+control (unmutated candidate)   0 failed | 86 passed
+
+C1 C2 C3 C4 C5 N3 N5 N10                          8 anchors unchanged   CAUGHT
+N1 N2 N4 N4b N6 N7 N8 N9 N11 N12 N13             11 re-anchored        CAUGHT
+V1 every instance refused as non-iterable         3 failed             CAUGHT
+V2 every instance deferred                        2 failed             CAUGHT
+V3 only the class BODY searched                   1 failed             CAUGHT
+V4 only the class ATTRIBUTES searched             2 failed             CAUGHT
+V5 any dunder counts, including __len__           1 failed             CAUGHT
+
+pristine sha256 71b7a6b600b3810b -> restored 71b7a6b600b3810b  IDENTICAL
+post-restore gate     0 failed | 86 passed
+caught 24 of 24, battery exit 0
+```
+
+**V1 is candidate v1's own defect, kept permanently as a mutation** so it cannot
+return silently. The five map one-to-one onto the five properties 0100 §"v2 的
+有限 closure 建議" requires.
+
+**N7 and N11 were reported NOT MEASURED on the first v2 run** — v2 replaced the
+line they attached to — and the harness exited non-zero rather than counting
+them as passes. Both were re-anchored onto the three-valued decision's final
+branch and are now red. That is the harness doing the job it was given in
+revision 1.
+
+## 6. Full verification
+
+```
+targeted gate      0 failed | 86 passed
+full suite         70 files / 3399 tests passed
 typecheck          exit 0
-monitor            741 programs / 27 constructs / no drift
+monitor            756 programs / 27 constructs / no drift
                    note: interp changed and so did its conformance test - reviewed
-census, candidate  OK 30 / DEFECT 0
-census, product    OK 10 / DEFECT 20   (unchanged, so the product is untouched)
-restore            9d4393b0533e0444 -> 9d4393b0533e0444  IDENTICAL
+census, candidate  OK 35 / DEFECT 0
+census, product    OK 13 / DEFECT 22
+restore            71b7a6b600b3810b -> 71b7a6b600b3810b  IDENTICAL
+product tree       0 modified tracked files
 ```
 
-## 6. The documentation correction from 0097 §4
+**One honest note about `pnpm test`.** It exits 1 with
+`[vitest-worker]: Timeout calling "onTaskUpdate"` while reporting 70/70 files
+and every test passing. That is the standing operational issue recorded in
+`docs/PROGRESS.md` (task #399), not a failure of this candidate: measured today,
+**the product at `45e27a4` exits 1 the same way**, with 70/70 passing. I had
+been reporting "full suite green" from the summary line through a pipe, which
+swallowed the exit code; it is stated properly here.
 
-`CENSUS.md` §6 listed "whether `set(a, b)` should reject before or after
-conversion is modeled" as NotMeasured while §2 of the same document had already
-fixed it as `2+ → arity TypeError`. One document, open and closed. The line is
-removed in this artifact's census update, and the candidate does not treat that
-cell as a free option: `checkArity` decides it before the set body runs, and
-N13 fails if that ordering is moved.
+## 7. NotMeasured
 
-## 7. NotMeasured, still
-
-- the base contract for `int(x, base)` — deferred, so every base, prefix,
-  underscore and sign rule remains unmeasured, and now says so at runtime
-- `str`'s real bytes-decoding path, for the same reason
-- the exact wording of the two deferral reasons against any external standard;
-  they are ours, not CPython's
-- `repr` beyond zero, one and surplus
+- the base contract for `int(x, base)`, deferred and now saying so at runtime
+- `str`'s real bytes-decoding path, same
+- iteration protocols beyond `__iter__` and `__getitem__` — `__reversed__` and
+  `__contains__` are genuinely unmeasured here.
+- **Inheritance is NOT one of them, and the distinction is measured rather than
+  argued.** v2 checks the instance's own class namespace only, so a protocol
+  reached through a base class would be refused rather than deferred — the same
+  defect one level up. I wrote that down as a remaining edge and then checked
+  it: `class Child(Base):` is `E_PARSE` — "Expected ':' after the class name but
+  found LPAREN" — so the language has no inheritance and a program that would
+  reach this branch does not parse. The zero here is structural, not a gap that
+  happens to be empty today. If inheritance is ever added, this branch must be
+  revisited in the same change, and V3/V4 are the mutations that would show it.
+- the wording of the two deferral reasons against any external standard
 - the value-type Cartesian product, excluded by 0097 §4
 
 ## 8. Boundaries
 
-Candidate only. Not landed, not merged, not released, not deployed. The product
-tree is clean and its blobs are unchanged. 005 is not reopened; 007-022, the
-registry, the trace error outcome contract and PR #3 / #4 are untouched. The
-monitor baseline-isolation candidate authorized at 0091 §2 is a separate
-artifact and has not been started.
+Candidate only. Not landed, not merged, not released, not deployed. 005 is not
+reopened; 007-022, the registry, the trace error outcome contract and PR #3 /
+#4 are untouched. The baseline-isolation candidate authorized at 0091 §2 is a
+separate artifact and has not been started.

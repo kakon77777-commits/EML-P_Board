@@ -1,0 +1,11 @@
+class EmptyIter:
+    def __iter__(self):
+        return self
+    def __next__(self):
+        raise StopIteration()
+
+EmptyIter() => it
+try:
+    str(len(set(it)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0

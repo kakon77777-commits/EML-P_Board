@@ -1,0 +1,15 @@
+class Base:
+    def __getitem__(self, i):
+        if i < 2:
+            return i
+        raise IndexError()
+
+class Child(Base):
+    def marker(self):
+        return 0
+
+Child() => c
+try:
+    str(len(set(c)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0

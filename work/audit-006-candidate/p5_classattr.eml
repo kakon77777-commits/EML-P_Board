@@ -1,0 +1,15 @@
+class Assigned:
+    def marker(self):
+        return 0
+
+def pick(self, i):
+    if i < 2:
+        return i
+    raise IndexError()
+
+pick => Assigned.__getitem__
+Assigned() => a
+try:
+    str(len(set(a)))^0
+except TypeError as e:
+    "TypeError: " + str(e)^0
