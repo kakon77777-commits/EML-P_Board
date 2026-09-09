@@ -1,0 +1,193 @@
+diff --git a/scripts/semantic-monitor.baseline.json b/scripts/semantic-monitor.baseline.json
+index ada0ea9..a2b2aa6 100644
+--- a/scripts/semantic-monitor.baseline.json
++++ b/scripts/semantic-monitor.baseline.json
+@@ -1,5 +1,5 @@
+ {
+-  "programs": 636,
++  "programs": 771,
+   "coverage": {
+     "sigma-summation": 9,
+     "cold-annotation": 5,
+@@ -16,8 +16,8 @@
+     "dict-literal": 35,
+     "percent-format": 104,
+     "modulo": 94,
+-    "and-or": 512,
+-    "not": 457,
++    "and-or": 647,
++    "not": 592,
+     "break": 17,
+     "continue": 5,
+     "pass": 15,
+@@ -26,18 +26,18 @@
+     "print-end": 201,
+     "triple-quoted-string": 1,
+     "sequence-repeat": 93,
+-    "nested-def": 438,
+-    "float-division": 308
++    "nested-def": 443,
++    "float-division": 440
+   },
+   "hashes": {
+     "packages/interp/src/values.ts": "a6105a432e5d3c27",
+     "tests/percent-format.test.ts": "d61b21f6878887da",
+     "tests/sum-compensation.test.ts": "dedbc5bbeee19528",
+     "tests/phase7d-exceptions.test.ts": "f0791b7e7b946d2a",
+-    "tests/builtin-shapes.test.ts": "de8a5ea6edf0461c",
++    "tests/builtin-shapes.test.ts": "5132f683ad257d24",
+     "tests/operator-matrix.test.ts": "dabec950984b5fca",
+     "tests/statement-interaction.test.ts": "81352156cb414ca7",
+-    "packages/interp/src/index.ts": "63321fefe898ea7c",
++    "packages/interp/src/index.ts": "1628e494c272faba",
+     "tests/interp.test.ts": "bc51bfbf5f3ce78e",
+     "tests/trace-completeness.test.ts": "db42e0f80f7f669c",
+     "tests/evaluation-order.test.ts": "91e38917b6b7c3a8",
+diff --git a/scripts/semantic-monitor.jsonl b/scripts/semantic-monitor.jsonl
+index 029a3a1..63b7f33 100644
+--- a/scripts/semantic-monitor.jsonl
++++ b/scripts/semantic-monitor.jsonl
+@@ -1090,3 +1090,6 @@
+ {"stream":"eml","proto":"eml-monitor-v1","seq":1090,"ts":"2026-09-08T05:08:43.166Z","type":"monitor:run","programs":756,"constructs":27,"alerts":0,"notes":0,"accepting":false}
+ {"stream":"eml","proto":"eml-monitor-v1","seq":1091,"ts":"2026-09-09T05:53:34.636Z","type":"monitor:run","programs":771,"constructs":27,"alerts":0,"notes":0,"accepting":false}
+ {"stream":"eml","proto":"eml-monitor-v1","seq":1092,"ts":"2026-09-09T06:20:27.172Z","type":"monitor:run","programs":771,"constructs":27,"alerts":0,"notes":1,"accepting":false}
++{"stream":"eml","proto":"eml-monitor-v1","seq":1093,"ts":"2026-09-09T08:12:37.983Z","type":"monitor:alert","kind":"stale-baseline","file":"packages/interp/src/index.ts","edited":["tests/builtin-shapes.test.ts"]}
++{"stream":"eml","proto":"eml-monitor-v1","seq":1094,"ts":"2026-09-09T08:12:37.987Z","type":"monitor:run","programs":771,"constructs":27,"alerts":1,"notes":1,"accepting":true}
++{"stream":"eml","proto":"eml-monitor-v1","seq":1095,"ts":"2026-09-09T08:12:38.007Z","type":"monitor:accept","programs":771,"alertsAccepted":1,"why":"AUDIT-006 landed at d2c2a0d: the interpreter and tests/builtin-shapes.test.ts moved together and were independently verified by the auditor at EMLP-RELAY-0102 and re-verified post-landing at 0105. Accepting so the drift guard for that pair is live again."}
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index a193c7e..4045ee2 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -515,10 +515,50 @@ if (baseline?.hashes) {
+     // reasoning holds) but says so out loud, so the excuse expires at the next
+     // accept instead of standing forever.
+     const seenInBaseline = (t) => baseline.hashes[t] !== undefined;
+-    const edited = tests.some((t) => hashes[t] !== null && seenInBaseline(t) && baseline.hashes[t] !== hashes[t]);
++    const editedTests = tests.filter(
++      (t) => hashes[t] !== null && seenInBaseline(t) && baseline.hashes[t] !== hashes[t],
++    );
++    const edited = editedTests.length > 0;
+     const unseen = tests.filter((t) => hashes[t] !== null && !seenInBaseline(t));
+     if (edited) {
++      // 2026-09-09: this branch has the branch below's property and, until now,
++      // none of its alerting.
++      //
++      // `edited` asks whether a conformance test differs FROM THE BASELINE. It
++      // does not ask anything about the change being looked at. So once the
++      // baseline is stale for that test — which is the ordinary state right
++      // after a landing that moved a semantics file and its test together —
++      // `edited` is true on every run, and every LATER change to the paired
++      // source file is excused by it.
++      //
++      // MEASURED, on product d2c2a0d with the baseline still at its pre-006
++      // entries: a real semantics change to the interpreter (abs() of a
++      // negative float stops taking the absolute value), with no conformance
++      // test touched at all, produced `changed, and so did its conformance test
++      // — reviewed` and exit 0. The builtin gate caught that particular change
++      // because a test for abs happens to exist; the monitor is the backstop
++      // for the changes no test covers, and the backstop was off.
++      //
++      // The sentence the branch below was given in 2026-08-09 — "the excuse it
++      // grants is not about the file that changed" — is true here word for
++      // word. So this branch gets the same treatment: the excuse still stands,
++      // and it says so out loud, so it expires at the next accept instead of
++      // standing forever.
+       notes.push(`${file} changed, and so did its conformance test — reviewed`);
++      alerts.push(
++        `STALE BASELINE    ${file} changed, and what excuses it is ${editedTests.join(', ')}
++` +
++          `                  differing from the baseline — which is a fact about the baseline
++` +
++          `                  being unaccepted, not about this change. Until the baseline is
++` +
++          `                  accepted, EVERY future change to this file is excused by that same
++` +
++          `                  difference — the drift check for it cannot fail.
++` +
++          `                  Run: pnpm monitor:accept -- --why "..."`,
++      );
++      record('monitor:alert', { kind: 'stale-baseline', file, edited: editedTests });
+     } else if (unseen.length > 0) {
+       notes.push(`${file} changed; excused by test(s) the baseline has never seen — see the STALE BASELINE alert`);
+       alerts.push(
+diff --git a/tests/semantic-monitor.test.ts b/tests/semantic-monitor.test.ts
+index fe2094d..8cf9b0e 100644
+--- a/tests/semantic-monitor.test.ts
++++ b/tests/semantic-monitor.test.ts
+@@ -233,7 +233,13 @@ describe('accepting an open alert requires a stated reason', () => {
+       // --ledger alone: writes that ledger, reads the committed baseline, and
+       // creates no baseline of its own.
+       const l = spawnSync(process.execPath, [monitor, '--ledger', onlyLedger], { encoding: 'utf8' });
+-      expect(l.status, '--ledger alone must still run against the committed baseline').toBe(0);
++      // Deliberately NOT an assertion on the exit code. What this test is about
++      // is which FILES a flag touches; the exit code is about whether the tree
++      // currently drifts from the baseline, which is a different question and
++      // not this test's to answer. The first version asserted status 0 and so
++      // would go red whenever the repo had an open alert — measuring the repo's
++      // state under the name of flag independence.
++      expect(l.error, '--ledger alone must run').toBeUndefined();
+       expect(existsSync(onlyLedger), '--ledger alone must write its ledger').toBe(true);
+       expect(existsSync(onlyBaseline), '--ledger must not invent a baseline').toBe(false);
+ 
+@@ -252,6 +258,61 @@ describe('accepting an open alert requires a stated reason', () => {
+   });
+ });
+ 
++describe('a stale baseline says so, whichever branch excuses the change', () => {
++  /**
++   * `edited` — a conformance test differs from the baseline — used to excuse a
++   * semantics change with a note and nothing else. But it is a fact about the
++   * BASELINE being unaccepted, not about the change being looked at, so once it
++   * is true it stays true and every later change to the paired source file is
++   * excused by it.
++   *
++   * Measured on product d2c2a0d with the baseline still at its pre-006 entries:
++   * a real semantics change to the interpreter, with no conformance test
++   * touched at all, produced "changed, and so did its conformance test —
++   * reviewed" and exit 0.
++   *
++   * The `unseen` branch was given exactly this treatment in 2026-08-09 and its
++   * own comment states the reason in words that apply here unchanged. This is
++   * the twin getting the same thing.
++   */
++  it('an edited-conformance-test excuse raises STALE BASELINE, not just a note', () => {
++    const seeded = runDrill('--accept', '--why', 'stale-branch drill setup');
++    expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
++
++    // Move a semantics file AND one of its conformance tests away from the
++    // baseline, which is the state a landing leaves behind before an accept.
++    const doctored = JSON.parse(readFileSync(drillBaseline, 'utf8'));
++    doctored.hashes['packages/interp/src/values.ts'] = '1111111111111111';
++    doctored.hashes['tests/percent-format.test.ts'] = '2222222222222222';
++    writeFileSync(drillBaseline, JSON.stringify(doctored, null, 2) + '\n', 'utf8');
++
++    const r = runDrill();
++    expect(r.stdout, 'the excuse must be stated, not left as a bare note').toContain('STALE BASELINE');
++    expect(r.stdout, 'and it must name what is doing the excusing').toContain('tests/percent-format.test.ts');
++    // A superset satisfies "contains", so name what must NOT appear. Found by
++    // the mutation battery: listing every conformance test rather than the ones
++    // that actually differ passed the assertion above and said something false.
++    expect(
++      r.stdout,
++      'only the tests that actually differ are doing the excusing',
++    ).not.toContain('tests/operator-matrix.test.ts');
++    expect(r.status, 'an open alert exits non-zero').toBe(1);
++    // The alert must reach the record, not only the console. Also found by the
++    // battery: removing the record() call left every assertion above green.
++    const stale = drillEvents().filter(
++      (e) => e.type === 'monitor:alert' && (e as { kind?: string }).kind === 'stale-baseline',
++    );
++    expect(stale.length, 'the stale finding must be recorded, not only printed').toBeGreaterThan(0);
++
++    // And it must expire: accepting clears it rather than leaving it standing.
++    const accepted = runDrill('--accept', '--why', 'stale-branch drill');
++    expect(accepted.status).toBe(0);
++    const after = runDrill();
++    expect(after.stdout, 'the excuse expires at the next accept').not.toContain('STALE BASELINE');
++    expect(after.status).toBe(0);
++  });
++});
++
+ describe('the drill does not write the record of what happened', () => {
+   /**
+    * Declared last so every spawn above has already run. This is the gate: it

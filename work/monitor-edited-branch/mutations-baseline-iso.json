@@ -1,0 +1,101 @@
+[
+  {
+    "id": "M1",
+    "file": "semantic-monitor.test.ts",
+    "label": "runDrill stops redirecting the baseline",
+    "failed": 3,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M2",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill baseline IS the committed baseline",
+    "failed": 2,
+    "passed": 10,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M3",
+    "file": "semantic-monitor.mjs",
+    "label": "--baseline is accepted and ignored",
+    "failed": 4,
+    "passed": 8,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M4",
+    "file": "semantic-monitor.mjs",
+    "label": "--ledger silently implies --baseline, so the flags stop being independent",
+    "failed": 2,
+    "passed": 10,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M5",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill goes back to doctoring the committed baseline directly",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M7",
+    "file": "semantic-monitor.mjs",
+    "label": "the edited branch goes back to a bare note, with no alert",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M11",
+    "file": "semantic-monitor.mjs",
+    "label": "the stale finding is printed but never recorded",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M8",
+    "file": "semantic-monitor.mjs",
+    "label": "the alert stops naming what is doing the excusing",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M9",
+    "file": "semantic-monitor.mjs",
+    "label": "editedTests lists every conformance test, not the differing ones",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M10",
+    "file": "semantic-monitor.mjs",
+    "label": "the stale finding is a note rather than an alert, so the exit code stays 0",
+    "failed": 1,
+    "passed": 11,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M6",
+    "file": "semantic-monitor.mjs",
+    "label": "--accept writes the committed baseline whatever --baseline said",
+    "failed": 4,
+    "passed": 8,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  }
+]
