@@ -1,0 +1,263 @@
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index 999b384..a193c7e 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -70,7 +70,6 @@ import { dirname, join, relative } from 'node:path';
+ 
+ const here = dirname(fileURLToPath(import.meta.url));
+ const root = join(here, '..');
+-const BASELINE = join(here, 'semantic-monitor.baseline.json');
+ // `--ledger <path>` redirects the append-only record. The default is the
+ // committed ledger and nothing but an explicit flag changes it: a flag is
+ // visible in the invocation and in a process list, where an environment
+@@ -85,6 +84,26 @@ const LEDGER =
+     ? process.argv[ledgerIndex + 1]
+     : join(here, 'semantic-monitor.jsonl');
+ 
++// `--baseline <path>` redirects the recorded expectation, for the same reason
++// and in the same shape as `--ledger` above. The two are independent: either
++// can be given without the other, and neither implies the other, so a caller
++// cannot get one redirect by asking for the other.
++//
++// It exists because the accept drill in tests/semantic-monitor.test.ts has to
++// run --accept against a baseline it has doctored, and until now it doctored
++// the COMMITTED one and put it back in a `finally`. That is a live-state
++// mutation guarded by the process surviving: measured on 2026-09-09 by killing
++// the suite mid-drill, the file left on disk carried a fabricated hash
++// (0000000000000000 against packages/interp/src/values.ts) and `git status`
++// showed it modified. A `finally` is not a guarantee; it is a plan that holds
++// while nothing interrupts, and the record of what the monitor expects is not
++// a thing to leave under that condition.
++const baselineIndex = process.argv.indexOf('--baseline');
++const BASELINE =
++  baselineIndex !== -1 && process.argv[baselineIndex + 1]
++    ? process.argv[baselineIndex + 1]
++    : join(here, 'semantic-monitor.baseline.json');
++
+ /** EML's own protocol id. Not borrowed from anywhere — see the header note. */
+ const LEDGER_PROTO = 'eml-monitor-v1';
+ 
+diff --git a/tests/semantic-monitor.test.ts b/tests/semantic-monitor.test.ts
+index 5ef12e3..fe2094d 100644
+--- a/tests/semantic-monitor.test.ts
++++ b/tests/semantic-monitor.test.ts
+@@ -41,6 +41,18 @@ const ledger = join(here, '..', 'scripts', 'semantic-monitor.jsonl');
+ /** Disposable. Every spawn in this file writes here instead of the ledger. */
+ const drillLedger = join(here, '..', 'scripts', '.monitor-test-ledger.jsonl');
+ 
++/** The committed baseline, and a disposable one for the accept drill.
++ *
++ *  The drill has to run `--accept` against a baseline it has doctored. It used
++ *  to doctor THIS file and restore it in a `finally`, which is a live-state
++ *  mutation that holds only while the process survives. Measured on 2026-09-09
++ *  by killing the suite mid-drill: the file left on disk carried a fabricated
++ *  hash for packages/interp/src/values.ts and `git status` showed it modified.
++ *  The drill now writes a file of its own and the committed one is never
++ *  opened for writing, so there is nothing for an interruption to leave. */
++const baselineFile = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
++const drillBaseline = join(here, '..', 'scripts', '.monitor-test-baseline.json');
++
+ /**
+  * Read once, at module load, before any test in this file has run. The last
+  * test compares against it. Without this the isolation is a convention: a
+@@ -49,6 +61,7 @@ const drillLedger = join(here, '..', 'scripts', '.monitor-test-ledger.jsonl');
+  * test here would still be green.
+  */
+ const committedLedgerAtLoad = readFileSync(ledger, 'utf8');
++const committedBaselineAtLoad = readFileSync(baselineFile, 'utf8');
+ 
+ /** Spawn the monitor with the ledger redirected. There is no overload that
+  *  forgets the flag: a test that wants to run the monitor calls this. */
+@@ -56,6 +69,21 @@ function runMonitor(...args: string[]) {
+   return spawnSync(process.execPath, [monitor, '--ledger', drillLedger, ...args], { encoding: 'utf8' });
+ }
+ 
++/** Spawn with BOTH records redirected. Used by anything that writes a baseline.
++ *
++ *  runMonitor is deliberately still available and still reads the committed
++ *  baseline: the drift check is only meaningful against the real one, and it
++ *  never writes. What must not happen is a WRITE to the committed baseline,
++ *  and that is what the gate at the bottom of this file measures — on the file,
++ *  not on the arguments, so it catches such a write however it arrives. */
++function runDrill(...args: string[]) {
++  return spawnSync(
++    process.execPath,
++    [monitor, '--ledger', drillLedger, '--baseline', drillBaseline, ...args],
++    { encoding: 'utf8' },
++  );
++}
++
+ function drillEvents(): Array<Record<string, unknown>> {
+   if (!existsSync(drillLedger)) return [];
+   return readFileSync(drillLedger, 'utf8')
+@@ -65,8 +93,23 @@ function drillEvents(): Array<Record<string, unknown>> {
+     .map((l) => JSON.parse(l) as Record<string, unknown>);
+ }
+ 
++/** Remove a disposable file, and refuse to remove a committed one.
++ *
++ *  Found by the mutation battery rather than by review: pointing `drillBaseline`
++ *  at the committed path makes the guard-the-guard assertion fail, but `afterAll`
++ *  still runs — and an unguarded rmSync then DELETED the committed baseline
++ *  outright. A red gate beside a destroyed artifact is not a caught mutation.
++ *  The same shape applies to the ledger, which had it too. */
++function discard(path: string) {
++  if (path === ledger || path === baselineFile) {
++    throw new Error(`refusing to delete a committed artifact: ${path}`);
++  }
++  if (existsSync(path)) rmSync(path);
++}
++
+ afterAll(() => {
+-  if (existsSync(drillLedger)) rmSync(drillLedger);
++  discard(drillLedger);
++  discard(drillBaseline);
+ });
+ 
+ describe('semantic drift monitor', () => {
+@@ -134,56 +177,77 @@ describe('accepting an open alert requires a stated reason', () => {
+    * for when one should be looking harder, a silent accept was the weakest
+    * point in the design.
+    *
+-   * The committed baseline is doctored here and restored in `finally`. That is
+-   * a live-state mutation with a guard rather than a copy, and it is stated as
+-   * such: an earlier comment on this block claimed the drill ran against a
+-   * copy, while `tmp` was written and never read. The claim is removed rather
+-   * than the behaviour changed, because changing it is a separate finding.
++   * The drill runs against a baseline of its own. It used to doctor the
++   * COMMITTED baseline and restore it in a `finally` — a live-state mutation
++   * guarded by the process surviving long enough to undo it. That guard was
++   * measured on 2026-09-09 rather than argued about: the suite was killed
++   * mid-drill and the committed baseline left on disk carried a fabricated hash
++   * (0000000000000000 against packages/interp/src/values.ts), with `git status`
++   * reporting it modified. There is now nothing to restore, so there is nothing
++   * an interruption can leave behind.
+    */
+   it('refuses --accept without --why when alerts are open, and does not write', () => {
+-    const tmp = join(here, '..', 'scripts', '.monitor-drill-baseline.json');
+-    const real = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
+-    const original = readFileSync(real, 'utf8');
++    // Start from a baseline that matches the working tree EXACTLY, then doctor
++    // one entry. Seeding rather than copying the committed file is what keeps
++    // this drill independent of the rest of the tree: on a day when the
++    // conformance tests had genuinely been edited, a doctored copy of the real
++    // baseline made the monitor see "source changed AND its test changed",
++    // report a note rather than an alert, and accept — so the drill failed for
++    // a reason that had nothing to do with the refusal it exists to check.
++    const seeded = runDrill('--accept', '--why', 'drill setup');
++    expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
++    expect(existsSync(drillBaseline), 'the seed must land in the drill baseline').toBe(true);
++
++    // A baseline claiming a different hash for a real semantics file now
++    // produces exactly the "changed without its test" alert, and it is the
++    // ONLY thing that differs — no source file is touched.
++    const doctored = JSON.parse(readFileSync(drillBaseline, 'utf8'));
++    doctored.hashes['packages/interp/src/values.ts'] = '0000000000000000';
++    const doctoredText = JSON.stringify(doctored, null, 2) + '\n';
++    writeFileSync(drillBaseline, doctoredText, 'utf8');
++
++    const refused = runDrill('--accept');
++    expect(refused.status, 'must refuse').toBe(1);
++    expect(refused.stdout).toContain('without a reason');
++    expect(readFileSync(drillBaseline, 'utf8'), 'a refusal must not move the baseline').toBe(doctoredText);
++
++    const accepted = runDrill('--accept', '--why', 'drill');
++    expect(accepted.status, 'must accept once a reason is given').toBe(0);
++    expect(readFileSync(drillBaseline, 'utf8'), 'accepting DOES move the baseline').not.toBe(doctoredText);
++
++    // The redirect must not have cost the drill its evidence. Both outcomes
++    // this block exists to distinguish have to be in the record, or the
++    // isolation has turned a real drill into a pair of exit codes.
++    const types = drillEvents().map((e) => e.type);
++    expect(types, 'the refusal must be recorded').toContain('monitor:accept-refused');
++    expect(types, 'the acceptance must be recorded').toContain('monitor:accept');
++  });
++
++  it('the two redirects are independent of each other', () => {
++    // Neither flag may imply the other. If --ledger quietly moved the baseline
++    // too, or --baseline the ledger, the drill would appear isolated while one
++    // committed artifact was still being written.
++    const onlyLedger = join(here, '..', 'scripts', '.monitor-test-only-ledger.jsonl');
++    const onlyBaseline = join(here, '..', 'scripts', '.monitor-test-only-baseline.json');
+     try {
+-      // Start from a baseline that matches the working tree EXACTLY, then
+-      // doctor one entry. Doctoring the COMMITTED baseline instead made this
+-      // drill depend on the rest of the tree being clean: on a day when the
+-      // conformance tests had genuinely been edited, the monitor saw "source
+-      // changed AND its test changed", reported a note rather than an alert,
+-      // and `--accept` succeeded — so the drill failed for a reason that had
+-      // nothing to do with the refusal it exists to check.
+-      const seeded = runMonitor('--accept', '--why', 'drill setup');
+-      expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
+-
+-      // A baseline claiming a different hash for a real semantics file now
+-      // produces exactly the "changed without its test" alert, and it is the
+-      // ONLY thing that differs — no source file is touched.
+-      const doctored = JSON.parse(readFileSync(real, 'utf8'));
+-      doctored.hashes['packages/interp/src/values.ts'] = '0000000000000000';
+-      writeFileSync(tmp, JSON.stringify(doctored, null, 2) + '\n', 'utf8');
+-      writeFileSync(real, JSON.stringify(doctored, null, 2) + '\n', 'utf8');
+-      const refused = runMonitor('--accept');
+-      expect(refused.status, 'must refuse').toBe(1);
+-      expect(refused.stdout).toContain('without a reason');
+-      expect(readFileSync(real, 'utf8'), 'a refusal must not move the baseline').toBe(
+-        JSON.stringify(doctored, null, 2) + '\n',
+-      );
++      // --ledger alone: writes that ledger, reads the committed baseline, and
++      // creates no baseline of its own.
++      const l = spawnSync(process.execPath, [monitor, '--ledger', onlyLedger], { encoding: 'utf8' });
++      expect(l.status, '--ledger alone must still run against the committed baseline').toBe(0);
++      expect(existsSync(onlyLedger), '--ledger alone must write its ledger').toBe(true);
++      expect(existsSync(onlyBaseline), '--ledger must not invent a baseline').toBe(false);
+ 
+-      const accepted = runMonitor('--accept', '--why', 'drill');
+-      expect(accepted.status, 'must accept once a reason is given').toBe(0);
+-      expect(readFileSync(real, 'utf8'), 'accepting DOES move the baseline').not.toBe(
+-        JSON.stringify(doctored, null, 2) + '\n',
++      // --baseline alone, with --accept, writes that baseline and nothing else.
++      const b = spawnSync(
++        process.execPath,
++        [monitor, '--ledger', drillLedger, '--baseline', onlyBaseline, '--accept', '--why', 'independence drill'],
++        { encoding: 'utf8' },
+       );
+-
+-      // The redirect must not have cost the drill its evidence. Both outcomes
+-      // this block exists to distinguish have to be in the record, or the
+-      // isolation has turned a real drill into a pair of exit codes.
+-      const types = drillEvents().map((e) => e.type);
+-      expect(types, 'the refusal must be recorded').toContain('monitor:accept-refused');
+-      expect(types, 'the acceptance must be recorded').toContain('monitor:accept');
++      expect(b.status, '--baseline alone must accept into that file').toBe(0);
++      expect(existsSync(onlyBaseline), '--baseline must write where it was pointed').toBe(true);
+     } finally {
+-      writeFileSync(real, original, 'utf8'); // always restore the committed baseline
+-      if (existsSync(tmp)) rmSync(tmp);
++      if (existsSync(onlyLedger)) rmSync(onlyLedger);
++      if (existsSync(onlyBaseline)) rmSync(onlyBaseline);
+     }
+   });
+ });
+@@ -207,4 +271,23 @@ describe('the drill does not write the record of what happened', () => {
+     // every assertion above and none of the point.
+     expect(drillLedger).not.toBe(ledger);
+   });
++
++  it('the committed baseline is byte-for-byte what it was at module load', () => {
++    // The same gate, for the other committed artifact. It is deliberately a
++    // check on the FILE rather than on the arguments of each spawn: a write
++    // that arrives some other way — a direct spawnSync, a writeFileSync in a
++    // future drill, a flag dropped from runDrill — is caught just the same.
++    // Before 2026-09-09 this assertion did not exist and the accept drill wrote
++    // this file four times per suite run, restoring it in a `finally`.
++    expect(
++      readFileSync(baselineFile, 'utf8'),
++      'something in this file wrote the committed baseline; use runDrill, which passes --baseline',
++    ).toBe(committedBaselineAtLoad);
++  });
++
++  it('the drill baseline is a different file from the committed one', () => {
++    // Guards that guard. Pointing --baseline at the committed path would
++    // satisfy every assertion above and none of the point.
++    expect(drillBaseline).not.toBe(baselineFile);
++  });
+ });

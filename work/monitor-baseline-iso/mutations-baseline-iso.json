@@ -1,0 +1,56 @@
+[
+  {
+    "id": "M1",
+    "file": "semantic-monitor.test.ts",
+    "label": "runDrill stops redirecting the baseline",
+    "failed": 2,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M2",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill baseline IS the committed baseline",
+    "failed": 2,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M3",
+    "file": "semantic-monitor.mjs",
+    "label": "--baseline is accepted and ignored",
+    "failed": 3,
+    "passed": 8,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M4",
+    "file": "semantic-monitor.mjs",
+    "label": "--ledger silently implies --baseline, so the flags stop being independent",
+    "failed": 2,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M5",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill goes back to doctoring the committed baseline directly",
+    "failed": 2,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M6",
+    "file": "semantic-monitor.mjs",
+    "label": "--accept writes the committed baseline whatever --baseline said",
+    "failed": 3,
+    "passed": 8,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  }
+]
