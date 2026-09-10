@@ -1,0 +1,82 @@
+[
+  {
+    "id": "W1",
+    "file": "semantic-monitor.mjs",
+    "label": "the known-flag guard is dropped, so --why eats the next flag",
+    "failed": 4,
+    "passed": 21,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W2",
+    "file": "semantic-monitor.mjs",
+    "label": "a --why with no value silently becomes 'no reason given'",
+    "failed": 1,
+    "passed": 24,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W3",
+    "file": "semantic-monitor.mjs",
+    "label": "a duplicate --why resolves to the first instead of refusing",
+    "failed": 1,
+    "passed": 24,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W4",
+    "file": "semantic-monitor.mjs",
+    "label": "the reason is validated and then the raw argv value is used anyway",
+    "failed": 7,
+    "passed": 18,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W5",
+    "file": "semantic-monitor.mjs",
+    "label": "the guard is over-strict and refuses a legitimate reason",
+    "failed": 2,
+    "passed": 15,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W6",
+    "file": "semantic-monitor.mjs",
+    "label": "one flag is dropped from the derived set, so --why --baseline passes",
+    "failed": 3,
+    "passed": 22,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W7",
+    "file": "semantic-monitor.mjs",
+    "label": "a blank reason is no longer distinguished from a missing one",
+    "failed": 1,
+    "passed": 24,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "W8",
+    "file": "semantic-monitor-why.test.ts",
+    "label": "the drill baseline holds no open alert, so every cell tests a clean accept",
+    "failed": -8,
+    "passed": 17,
+    "exit": 1,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  }
+]

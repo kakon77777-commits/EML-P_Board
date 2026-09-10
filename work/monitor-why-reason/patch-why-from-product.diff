@@ -1,0 +1,885 @@
+diff --git a/scripts/semantic-monitor.mjs b/scripts/semantic-monitor.mjs
+index 999b384..8446fe2 100644
+--- a/scripts/semantic-monitor.mjs
++++ b/scripts/semantic-monitor.mjs
+@@ -23,6 +23,14 @@
+  *   node scripts/semantic-monitor.mjs                    # report; exit 1 on a regression
+  *   node scripts/semantic-monitor.mjs --accept           # record the current state
+  *   node scripts/semantic-monitor.mjs --accept --why "…" # …required if alerts are open
++ *   node scripts/semantic-monitor.mjs --ledger <path>    # append elsewhere than the committed record
++ *   node scripts/semantic-monitor.mjs --baseline <path>  # read/write elsewhere than the committed baseline
++ *
++ * Every value-taking flag REQUIRES its value. Given without one — or followed
++ * by another flag, or an empty string, or given twice — the run stops with
++ * exit 2, touches neither committed artifact and records nothing. That includes
++ * `--why`: a reason that is really the next flag on the line is how an open
++ * alert gets accepted with nobody's reason attached. See the notes above each.
+  *
+  * ── The ledger ────────────────────────────────────────────────────────────
+  *
+@@ -70,7 +78,6 @@ import { dirname, join, relative } from 'node:path';
+ 
+ const here = dirname(fileURLToPath(import.meta.url));
+ const root = join(here, '..');
+-const BASELINE = join(here, 'semantic-monitor.baseline.json');
+ // `--ledger <path>` redirects the append-only record. The default is the
+ // committed ledger and nothing but an explicit flag changes it: a flag is
+ // visible in the invocation and in a process list, where an environment
+@@ -79,11 +86,190 @@ const BASELINE = join(here, 'semantic-monitor.baseline.json');
+ // script for real - run, accept-refused, accept - and a drill that writes
+ // the real ledger puts eleven lines of rehearsal into the record of what
+ // actually happened, on every suite run.
+-const ledgerIndex = process.argv.indexOf('--ledger');
+-const LEDGER =
+-  ledgerIndex !== -1 && process.argv[ledgerIndex + 1]
+-    ? process.argv[ledgerIndex + 1]
+-    : join(here, 'semantic-monitor.jsonl');
++//
++// `--baseline <path>` redirects the recorded expectation, for the same reason
++// and in the same shape as `--ledger` above. The two are independent: either
++// can be given without the other, and neither implies the other, so a caller
++// cannot get one redirect by asking for the other.
++//
++// It exists because the accept drill in tests/semantic-monitor.test.ts has to
++// run --accept against a baseline it has doctored, and until now it doctored
++// the COMMITTED one and put it back in a `finally`. That is a live-state
++// mutation guarded by the process surviving: measured on 2026-09-09 by killing
++// the suite mid-drill, the file left on disk carried a fabricated hash
++// (0000000000000000 against packages/interp/src/values.ts) and `git status`
++// showed it modified. A `finally` is not a guarantee; it is a plan that holds
++// while nothing interrupts, and the record of what the monitor expects is not
++// a thing to leave under that condition.
++//
++// BOTH FLAGS ARE RESOLVED BY ONE FUNCTION, AND A FLAG THAT CANNOT BE RESOLVED
++// STOPS THE RUN. The first version of each of them read
++//
++//   index !== -1 && process.argv[index + 1] ? process.argv[index + 1] : COMMITTED
++//
++// which collapses "the flag was not given" and "the flag was given without its
++// path" into one branch and answers both with the committed artifact. Measured
++// on 2026-09-10 against that exact code, in an isolated worktree, exit codes
++// read from $? rather than through a pipe:
++//
++//   --ledger .drill.jsonl --accept --why probe --baseline
++//       exit 0, and the COMMITTED BASELINE was rewritten: 3336 -> 3260 bytes,
++//       git blob ada0ea9b -> a2b2aa6c, `git status M`
++//   --ledger
++//       exit 0, and the COMMITTED LEDGER was appended: 232770 -> 232946 bytes,
++//       `git status M`. This one reproduces on the SHIPPED product monitor
++//       (blob 999b384b) too, where `--ledger` has had this shape since it
++//       landed; the candidate did not invent it, it copied it onto --baseline,
++//       where the flag governs --accept and so writes an expectation rather
++//       than a log line.
++//   --baseline --ledger .drill.jsonl
++//       exit 0, and the baseline path became the literal string "--ledger", so
++//       the run found no baseline, compared against nothing, and said so in a
++//       note that reads like a fresh checkout.
++//
++// Each is a caller who ASKED for the redirect and got the committed file. The
++// third is the worst: it writes nothing and silently turns the drift check off.
++//
++// So resolution is strict, it is the same function for both flags because they
++// are the same promise, and it happens HERE — above nextSeq(), which reads the
++// ledger — so a run that cannot resolve its paths has touched neither artifact,
++// for writing or for reading.
++//
++// A failure here exits 2, not 1. Exit 1 means the monitor checked and the tree
++// needs looking at; exit 2 means the monitor did not check. The daily flow
++// reads this exit code, and a caller that treats every non-zero as drift would
++// otherwise read a typo as a regression.
++//
++// The failure is NOT recorded. Recording needs a resolved ledger path, which is
++// the thing just refused, and appending to the committed one would be exactly
++// the write the flag was asking to send elsewhere.
++
++/** Resolve one `--flag <path>`. Absent: the committed default. Present: the
++ *  next argument must exist, be non-empty, and not itself be a flag. */
++function pathFlag(flag, committedDefault) {
++  const at = [];
++  for (let i = 2; i < process.argv.length; i++) {
++    if (process.argv[i] === flag) at.push(i);
++  }
++  if (at.length === 0) return committedDefault;
++  if (at.length > 1) {
++    refuse(`${flag} was given ${at.length} times; which path is meant is ambiguous`);
++  }
++  const value = process.argv[at[0] + 1];
++  if (value === undefined) refuse(`${flag} needs a path, and is the last argument`);
++  if (value.trim() === '') refuse(`${flag} was given an empty path`);
++  if (value.startsWith('--')) {
++    refuse(`${flag} was followed by ${value}, which is another flag rather than a path`);
++  }
++  return value;
++}
++
++/** Stop before anything is read or written. See above for why the code is 2. */
++const PATH_DETAIL = [
++  '  A path flag that cannot be resolved does not fall back to the',
++  '  committed artifact: sparing that artifact is what the redirect',
++  '  exists for. Nothing was read and nothing was written.',
++];
++
++/** The second argument exists because `--why` refuses for a different reason
++ *  than `--ledger`/`--baseline` do, and a message that explains the wrong one
++ *  sends the reader to the wrong part of the invocation. The default keeps the
++ *  path-flag text exactly as it was. */
++function refuse(problem, detail = PATH_DETAIL) {
++  console.error(`semantic-monitor: ${problem}`);
++  for (const line of detail) console.error(line);
++  process.exit(2);
++}
++
++const LEDGER = pathFlag('--ledger', join(here, 'semantic-monitor.jsonl'));
++const BASELINE = pathFlag('--baseline', join(here, 'semantic-monitor.baseline.json'));
++
++// `--why "<reason>"` — the justification recorded alongside an acceptance, and
++// REQUIRED whenever alerts are open. Parsed here, with the path flags, for the
++// same reason they are: an argument that cannot be resolved must not reach the
++// point where something can be done with it.
++//
++// It used to read
++//
++//   const why = whyIndex !== -1 ? (process.argv[whyIndex + 1] ?? '') : '';
++//
++// which makes THE NEXT FLAG the reason. Measured by the auditor on the shipped
++// product at 2019d50 and reproduced here on 2026-09-10, against a real open
++// alert (one comment appended to packages/parser/src/parser.ts, neither of its
++// conformance tests touched):
++//
++//   node scripts/semantic-monitor.mjs --accept --why --ledger <temp>
++//     ALERT: SEMANTICS CHANGED packages/parser/src/parser.ts changed but none
++//            of its conformance tests did
++//            ... re-run with --accept --why "reason".
++//     semantic-monitor: baseline recorded (786 corpus programs)
++//       accepted 1 alert(s): --ledger
++//     exit 0, committed baseline ada0ea9b -> 52ad6276, git status M
++//     ledger: {"type":"monitor:accept","alertsAccepted":1,"why":"--ledger"}
++//
++// "--ledger" is not empty, so `why.trim() === ''` is false, so the refusal that
++// exists to keep an accept from being unauditable never fires. The baseline
++// moved and the record says the reason was "--ledger". That is precisely the
++// failure the ledger was built to prevent, reached by a typo — and the alert
++// text that scrolled past a second earlier was asking for a reason.
++//
++// A reason is free text, so unlike a path it may legitimately begin with a
++// dash: `--why "--accept was already agreed in review"` is a sentence, not a
++// flag. What a reason may never BE is one of this script's own flags, and the
++// set is derived from one place so that adding a flag later extends the guard
++// without anyone remembering to.
++const KNOWN_FLAGS = ['--accept', '--why', '--ledger', '--baseline'];
++
++const REASON_DETAIL = [
++  '  An acceptance is only auditable if the reason in the record was written',
++  '  by someone. Nothing was read, nothing was written, and no accept or',
++  '  refusal was recorded: there is no judgement here to keep.',
++];
++
++/** Resolve `--why <reason>`. Absent: the empty string, which is what the open-
++ *  alert refusal below is for — "no reason offered" is a real answer about the
++ *  tree. Present: the next argument must exist, be non-blank, and not be one of
++ *  this script's flags.
++ *
++ *  WHY A MALFORMED --why EXITS 2 AND THE MISSING ONE EXITS 1. They are
++ *  different events and the ledger has to be able to tell them apart:
++ *
++ *    open alert, no --why at all   exit 1   records monitor:accept-refused
++ *                                           baseline unmoved. The monitor
++ *                                           checked; a person declined to give
++ *                                           a reason, and that is worth keeping.
++ *    --why malformed               exit 2   records NOTHING, baseline unmoved.
++ *                                           The invocation is not well formed,
++ *                                           so nothing was checked and there is
++ *                                           no judgement to record. Writing an
++ *                                           accept-refused here would put a
++ *                                           statement about the tree into the
++ *                                           record on the strength of a typo.
++ *    open alert, real reason       exit 0   records monitor:accept, and moves
++ *                                           the baseline.
++ */
++function reasonFlag(flag) {
++  const at = [];
++  for (let i = 2; i < process.argv.length; i++) {
++    if (process.argv[i] === flag) at.push(i);
++  }
++  if (at.length === 0) return '';
++  if (at.length > 1) {
++    refuse(`${flag} was given ${at.length} times; which reason is meant is ambiguous`, REASON_DETAIL);
++  }
++  const value = process.argv[at[0] + 1];
++  if (value === undefined) refuse(`${flag} needs a reason, and is the last argument`, REASON_DETAIL);
++  if (value.trim() === '') refuse(`${flag} was given an empty reason`, REASON_DETAIL);
++  if (KNOWN_FLAGS.includes(value)) {
++    refuse(
++      `${flag} was followed by ${value}, which is one of this script's own flags rather than a reason`,
++      REASON_DETAIL,
++    );
++  }
++  return value;
++}
++
++const why = reasonFlag('--why');
+ 
+ /** EML's own protocol id. Not borrowed from anywhere — see the header note. */
+ const LEDGER_PROTO = 'eml-monitor-v1';
+@@ -432,9 +618,7 @@ function measureHashes() {
+ /* ── 3. Report ────────────────────────────────────────────────────────────── */
+ 
+ const accept = process.argv.includes('--accept');
+-/** `--why "reason"` — the justification recorded alongside an acceptance. */
+-const whyIndex = process.argv.indexOf('--why');
+-const why = whyIndex !== -1 ? (process.argv[whyIndex + 1] ?? '') : '';
++// `why` is resolved with the path flags, above, and for the same reason.
+ 
+ const coverage = measureCoverage();
+ const hashes = measureHashes();
+diff --git a/tests/semantic-monitor-flags.test.ts b/tests/semantic-monitor-flags.test.ts
+new file mode 100644
+index 0000000..1f753b8
+--- /dev/null
++++ b/tests/semantic-monitor-flags.test.ts
+@@ -0,0 +1,189 @@
++import { describe, it, expect, afterAll } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { readFileSync, existsSync, rmSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
++import { dirname, join } from 'node:path';
++
++/**
++ * THE PATH FLAGS, AND WHAT HAPPENS WHEN ONE HAS NO PATH.
++ *
++ * `--ledger <path>` and `--baseline <path>` used to resolve as
++ *
++ *   index !== -1 && process.argv[index + 1] ? process.argv[index + 1] : COMMITTED
++ *
++ * which answers "the flag was not given" and "the flag was given without its
++ * path" with the same thing: the committed artifact. So a caller who ASKED for
++ * the redirect — who typed the flag — got the file the redirect exists to
++ * spare. Measured on 2026-09-10 against that code, in an isolated worktree,
++ * with exit codes read from $? rather than through a pipe:
++ *
++ *   --ledger <drill> --accept --why probe --baseline
++ *       exit 0, committed baseline rewritten, 3336 -> 3260 bytes, git status M
++ *   --ledger
++ *       exit 0, committed ledger appended, 232770 -> 232946 bytes, M. This one
++ *       reproduces on the shipped product monitor too — the candidate copied
++ *       the shape onto --baseline, where it governs --accept.
++ *   --baseline --ledger <drill>
++ *       exit 0, the baseline path became the literal string "--ledger", so the
++ *       run compared against no baseline at all and reported like a fresh
++ *       checkout. It writes nothing, so no write-watching gate can see it.
++ *
++ * A FILE OF ITS OWN, because it is a different concern: what the CLI does with
++ * its arguments, rather than whether the drift drill writes the record of what
++ * happened. tests/semantic-monitor.test.ts is untouched by v2 - same blob as
++ * the candidate the auditor already read.
++ *
++ * A NOTE ON `pnpm test` ON THIS MACHINE, because these cells were briefly
++ * blamed for it. The suite intermittently ends `71 passed | 3498 passed` with
++ * `Timeout calling "onTaskUpdate"` and exit 1: every test green, the run red.
++ * It is birpc's 60s default firing while the machine is saturated - 70-odd
++ * files spawning python and node at ~6x parallelism - and it is the same class
++ * the testTimeout note in vitest.config.ts already records: a fixed bound that
++ * is really a statement about how busy the machine is.
++ *
++ * It is NOT caused by these cells. Samples on 2026-09-10, this worktree:
++ * candidate 1, with none of this file present, exited 0 once early and then 1
++ * three times in a row later the same session; v2 exited 1 three times, then 0
++ * twice, then 1. The first four samples looked like a clean split and were
++ * read that way; three more samples of the control removed it. Anything this
++ * file says about cost is therefore about spawns and seconds, which are
++ * measurable, and not about the exit code, which on this machine is not.
++ *
++ * So the cells below spend one spawn each. Every refusal exits before the
++ * corpus is scanned, which makes them the cheapest spawns in the suite; the
++ * single positive control is the only full run.
++ */
++const here = dirname(fileURLToPath(import.meta.url));
++const monitor = join(here, '..', 'scripts', 'semantic-monitor.mjs');
++const ledger = join(here, '..', 'scripts', 'semantic-monitor.jsonl');
++const baselineFile = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
++
++/** Disposable, and named differently from the other monitor file's scratch
++ *  paths so two workers running at once cannot write each other's files. */
++const drillLedger = join(here, '..', 'scripts', '.monitor-flags-ledger.jsonl');
++const drillBaseline = join(here, '..', 'scripts', '.monitor-flags-baseline.json');
++
++/** Read at module load, in THIS file, independently of the other one's copy. */
++const committedLedgerAtLoad = readFileSync(ledger, 'utf8');
++const committedBaselineAtLoad = readFileSync(baselineFile, 'utf8');
++
++/** Remove a disposable file, and refuse to remove a committed one. Same guard
++ *  as the drill file's, for the same reason: the mutation battery found that an
++ *  unguarded rmSync in a teardown deletes the real artifact outright when a
++ *  mutation points a drill path at it. */
++function discard(path: string) {
++  if (path === ledger || path === baselineFile) {
++    throw new Error(`refusing to delete a committed artifact: ${path}`);
++  }
++  if (existsSync(path)) rmSync(path);
++}
++
++afterAll(() => {
++  discard(drillLedger);
++  discard(drillBaseline);
++});
++
++/** Spawn the monitor with EXACTLY these arguments — no redirect added. That is
++ *  the point: these are the runs that must not reach a committed artifact. */
++const runRaw = (...args: string[]) =>
++  spawnSync(process.execPath, [monitor, ...args], { encoding: 'utf8' });
++
++/** Both committed artifacts, unmoved. Every cell asserts this as well as the
++ *  status: a refusal that still wrote would pass a status check on its own. */
++function bothCommittedUnmoved(why: string) {
++  expect(readFileSync(ledger, 'utf8'), `${why}: the committed ledger moved`).toBe(committedLedgerAtLoad);
++  expect(readFileSync(baselineFile, 'utf8'), `${why}: the committed baseline moved`).toBe(
++    committedBaselineAtLoad,
++  );
++}
++
++describe('a path flag without a usable path stops the run', () => {
++  it('--baseline as the last argument is refused, writes nothing, and records nothing', () => {
++    // --accept is here on purpose: without it the fail-open only READ the
++    // committed baseline, and with it the fail-open WROTE it. The cell has to
++    // exercise the writing form.
++    //
++    // Three properties on one spawn, because they are one claim from three
++    // sides — the run stopped before the recording machinery:
++    //   the status says refused, the committed files did not move, and no
++    //   ledger gained a line, not even the disposable one this run was given.
++    const before = existsSync(drillLedger) ? readFileSync(drillLedger, 'utf8') : '';
++    const r = runRaw('--ledger', drillLedger, '--accept', '--why', 'gate probe', '--baseline');
++
++    // Exit 2 rather than 1 is load-bearing. The daily flow reads this code, and
++    // 1 already means "the monitor checked and the tree needs looking at". A
++    // mistyped flag is not a regression, and a caller that cannot tell them
++    // apart will either chase drift that does not exist or learn to ignore the
++    // report that matters.
++    expect(r.status, 'a flag missing its path must not exit 0').toBe(2);
++    expect(r.status, 'and must stay distinguishable from a drift failure').not.toBe(1);
++    expect(r.stderr).toContain('--baseline needs a path');
++
++    const after = existsSync(drillLedger) ? readFileSync(drillLedger, 'utf8') : '';
++    expect(after, 'a refusal must not append to any ledger, drill or committed').toBe(before);
++    bothCommittedUnmoved('--baseline with no path');
++  });
++
++  it('--ledger as the last argument is refused', () => {
++    const r = runRaw('--ledger');
++    expect(r.status, 'a flag missing its path must not exit 0').toBe(2);
++    expect(r.stderr).toContain('--ledger needs a path');
++    bothCommittedUnmoved('--ledger with no path');
++  });
++
++  it('a path flag does not swallow the next flag as its path', () => {
++    // The quietest of the three, and the only one no write-watching gate can
++    // catch: nothing is written. The run simply finds no baseline where it was
++    // pointed, compares against nothing, and reports like a fresh checkout.
++    const r = runRaw('--baseline', '--ledger', drillLedger);
++    expect(r.status, 'a flag as a path must not exit 0').toBe(2);
++    expect(r.stderr).toContain('which is another flag rather than a path');
++    expect(r.stdout, 'and it must not have run the comparison at all').not.toContain('no baseline yet');
++    bothCommittedUnmoved('--baseline followed by --ledger');
++  });
++
++  it('an empty path is refused rather than resolved', () => {
++    // '' is falsy, so the old expression answered it with the committed file
++    // exactly as it answered undefined. A shell expanding an unset variable
++    // produces this without anyone typing it.
++    const r = runRaw('--ledger', '', '--baseline', drillBaseline);
++    expect(r.status, 'an empty path must not exit 0').toBe(2);
++    expect(r.stderr).toContain('empty path');
++    bothCommittedUnmoved('--ledger with an empty path');
++  });
++
++  it('a flag given twice is refused rather than resolved to one of them', () => {
++    // Two paths, one flag: picking either is a guess about which was meant, and
++    // the guess is invisible in the output. Refusing is the adjudication, and
++    // this cell is what makes it a decision rather than an accident of indexOf
++    // returning the first match.
++    const other = join(here, '..', 'scripts', '.monitor-flags-duplicate.jsonl');
++    try {
++      const r = runRaw('--ledger', drillLedger, '--ledger', other);
++      expect(r.status, 'an ambiguous flag must not exit 0').toBe(2);
++      expect(r.stderr).toContain('ambiguous');
++      expect(existsSync(other), 'neither candidate path may be written').toBe(false);
++      bothCommittedUnmoved('--ledger given twice');
++    } finally {
++      discard(other);
++    }
++  });
++
++  it('the legal forms still work — the positive control', () => {
++    // Without this the whole block is satisfied by a monitor that refuses
++    // everything. One spawn, both flags legal at once, and it reads rather than
++    // accepts: the write side of a legal --baseline is drilled in
++    // tests/semantic-monitor.test.ts, which does it already and need not do it
++    // twice on a machine this loaded.
++    //
++    // The other default — NO --ledger at all, writing the committed ledger —
++    // cannot be controlled from inside this suite: doing it once would be the
++    // very write the gates here exist to catch. It is measured in the handback
++    // instead, on the real command, and reported as a null control rather than
++    // assumed.
++    const r = runRaw('--ledger', drillLedger, '--baseline', drillBaseline);
++    expect(r.status, 'two well-formed flags must run').toBe(0);
++    expect(r.stdout).toContain('corpus programs');
++    bothCommittedUnmoved('the legal form');
++  });
++});
+diff --git a/tests/semantic-monitor-why.test.ts b/tests/semantic-monitor-why.test.ts
+new file mode 100644
+index 0000000..52cc887
+--- /dev/null
++++ b/tests/semantic-monitor-why.test.ts
+@@ -0,0 +1,226 @@
++import { describe, it, expect, beforeAll, afterAll } from 'vitest';
++import { spawnSync } from 'node:child_process';
++import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
++import { dirname, join } from 'node:path';
++
++/**
++ * THE REASON ATTACHED TO AN ACCEPTANCE, AND HOW IT STOPPED BEING ONE.
++ *
++ * The whole point of the ledger is that an acceptance cannot be silent: when
++ * alerts are open, `--accept` requires `--why "<reason>"`, and the reason is
++ * appended to the record so a later reader can see what was waved through and
++ * on what grounds. The check for "a reason was given" was
++ *
++ *   const why = whyIndex !== -1 ? (process.argv[whyIndex + 1] ?? '') : '';
++ *   if (alerts.length > 0 && why.trim() === '') { refuse }
++ *
++ * which takes THE NEXT ARGUMENT whatever it is. Put another flag there and the
++ * flag becomes the reason: non-empty, so the refusal never fires.
++ *
++ * Reproduced on the SHIPPED PRODUCT at 2019d50 on 2026-09-10, against a real
++ * open alert made the honest way — one comment appended to
++ * packages/parser/src/parser.ts, neither of its conformance tests touched:
++ *
++ *   node scripts/semantic-monitor.mjs --accept --why --ledger <temp>
++ *     ALERT: SEMANTICS CHANGED packages/parser/src/parser.ts changed but none
++ *            of its conformance tests did
++ *            ... re-run with --accept --why "reason".
++ *     semantic-monitor: baseline recorded (786 corpus programs)
++ *       accepted 1 alert(s): --ledger
++ *     exit 0, committed baseline ada0ea9b -> 52ad6276, git status M
++ *     ledger: {"type":"monitor:accept","alertsAccepted":1,"why":"--ledger"}
++ *
++ * The alert asked for a reason and then accepted the name of a flag as one. The
++ * same shape reproduces on the path-flag candidate — `--why --baseline <p>`
++ * records `"why":"--baseline"` — because there is nothing wrong with that
++ * `--baseline`: the malformation is entirely in `--why`, so a strict path
++ * parser cannot see it.
++ *
++ * A SEPARATE FILE from semantic-monitor-flags.test.ts, deliberately: that one
++ * belongs to a layer the auditor has verified, and keeping this candidate out
++ * of it leaves those blobs byte-identical to what she read.
++ *
++ * WHAT EVERY CELL BELOW ASSERTS. Not just the exit code — a refusal that still
++ * moved the baseline, or still wrote a `monitor:accept`, would pass a status
++ * check while doing the exact damage this is about. So each cell checks the
++ * status, the baseline bytes, and the absence of an accept event, against a
++ * drill baseline that is holding a REAL open alert. Without the open alert
++ * `--accept` would move the baseline anyway and the cells would prove nothing.
++ */
++const here = dirname(fileURLToPath(import.meta.url));
++const monitor = join(here, '..', 'scripts', 'semantic-monitor.mjs');
++const ledger = join(here, '..', 'scripts', 'semantic-monitor.jsonl');
++const baselineFile = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
++
++/** Disposable, and named apart from both other monitor files' scratch paths so
++ *  three workers running at once cannot write each other's. */
++const drillLedger = join(here, '..', 'scripts', '.monitor-why-ledger.jsonl');
++const drillBaseline = join(here, '..', 'scripts', '.monitor-why-baseline.json');
++
++const committedLedgerAtLoad = readFileSync(ledger, 'utf8');
++const committedBaselineAtLoad = readFileSync(baselineFile, 'utf8');
++
++function discard(path: string) {
++  if (path === ledger || path === baselineFile) {
++    throw new Error(`refusing to delete a committed artifact: ${path}`);
++  }
++  if (existsSync(path)) rmSync(path);
++}
++
++afterAll(() => {
++  discard(drillLedger);
++  discard(drillBaseline);
++});
++
++const run = (...args: string[]) =>
++  spawnSync(process.execPath, [monitor, '--ledger', drillLedger, '--baseline', drillBaseline, ...args], {
++    encoding: 'utf8',
++  });
++
++/** Spawn with EXACTLY these arguments, so a cell can put --why last. */
++const runRaw = (...args: string[]) =>
++  spawnSync(process.execPath, [monitor, ...args], { encoding: 'utf8' });
++
++function drillEvents(): Array<Record<string, unknown>> {
++  if (!existsSync(drillLedger)) return [];
++  return readFileSync(drillLedger, 'utf8')
++    .trimEnd()
++    .split('\n')
++    .filter((l) => l.length > 0)
++    .map((l) => JSON.parse(l) as Record<string, unknown>);
++}
++
++/** The text of the drill baseline while an alert is open against it. */
++let doctoredText = '';
++
++/** Seed a baseline that matches the tree, then doctor one entry so a real
++ *  "changed without its test" alert is open. Seeding rather than copying the
++ *  committed baseline keeps this independent of the rest of the tree. */
++function doctor() {
++  const seeded = run('--accept', '--why', 'why-drill setup');
++  expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
++  const b = JSON.parse(readFileSync(drillBaseline, 'utf8'));
++  b.hashes['packages/interp/src/values.ts'] = '0000000000000000';
++  doctoredText = JSON.stringify(b, null, 2) + '\n';
++  writeFileSync(drillBaseline, doctoredText, 'utf8');
++}
++
++beforeAll(() => {
++  doctor();
++  // Guard the guard: if this does not actually produce an alert, every refusal
++  // below would be measuring an ordinary clean-state accept.
++  const check = run();
++  expect(check.stdout, 'the drill must have a real open alert to accept').toContain('SEMANTICS CHANGED');
++  expect(check.status, 'and the run must be failing because of it').toBe(1);
++});
++
++/** Nothing was accepted, and the expectation did not move. */
++function nothingAccepted(why: string) {
++  expect(readFileSync(drillBaseline, 'utf8'), `${why}: the drill baseline moved`).toBe(doctoredText);
++  const accepts = drillEvents().filter((e) => e.type === 'monitor:accept');
++  const last = accepts[accepts.length - 1];
++  expect(last?.why, `${why}: an acceptance was recorded`).not.toBe(undefined);
++  expect(last?.alertsAccepted, `${why}: an OPEN ALERT was accepted`).toBe(0);
++  expect(readFileSync(ledger, 'utf8'), `${why}: the committed ledger moved`).toBe(committedLedgerAtLoad);
++  expect(readFileSync(baselineFile, 'utf8'), `${why}: the committed baseline moved`).toBe(
++    committedBaselineAtLoad,
++  );
++}
++
++describe('an acceptance cannot borrow a flag for its reason', () => {
++  it('no --why at all is still refused with exit 1 and a recorded refusal', () => {
++    // The pre-existing contract, kept as the positive control for the OTHER
++    // branch. A malformed --why and a missing --why are different events and
++    // the ledger has to distinguish them: this one is a person declining to
++    // give a reason, which is a judgement about the tree and worth recording.
++    const before = drillEvents().filter((e) => e.type === 'monitor:accept-refused').length;
++    const r = run('--accept');
++    expect(r.status, 'a missing reason is exit 1, not the CLI-usage 2').toBe(1);
++    expect(r.stdout).toContain('without a reason');
++    const after = drillEvents().filter((e) => e.type === 'monitor:accept-refused').length;
++    expect(after, 'the refusal must reach the record').toBe(before + 1);
++    nothingAccepted('no --why');
++  });
++
++  it('--why as the last argument is refused, and records nothing', () => {
++    // Exit 2 and NO ledger event, unlike the cell above: the invocation is not
++    // well formed, so nothing was checked and there is no judgement to keep.
++    // Writing an accept-refused here would put a statement about the tree into
++    // the record on the strength of a typo.
++    const before = drillEvents().length;
++    const r = runRaw('--ledger', drillLedger, '--baseline', drillBaseline, '--accept', '--why');
++    expect(r.status, 'a flag missing its value must not exit 0').toBe(2);
++    expect(r.status, 'and is a usage failure, not the missing-reason refusal').not.toBe(1);
++    expect(r.stderr).toContain('--why needs a reason');
++    expect(drillEvents().length, 'a usage failure records nothing at all').toBe(before);
++    nothingAccepted('--why with no reason');
++  });
++
++  it('--why does not take --ledger as the reason', () => {
++    // The auditor's shipped-product reproduction, as a cell.
++    const r = runRaw('--baseline', drillBaseline, '--accept', '--why', '--ledger', drillLedger);
++    expect(r.status, 'a flag is not a reason').toBe(2);
++    expect(r.stderr).toContain("one of this script's own flags rather than a reason");
++    nothingAccepted('--why --ledger');
++  });
++
++  it('--why does not take --baseline as the reason either', () => {
++    // On this stack --baseline is well formed, so the strict path parser sees
++    // nothing wrong. The malformation is entirely in --why, which is why this
++    // needs its own guard rather than riding on the path flags'.
++    const r = runRaw('--ledger', drillLedger, '--accept', '--why', '--baseline', drillBaseline);
++    expect(r.status, 'a flag is not a reason').toBe(2);
++    expect(r.stderr).toContain('--baseline');
++    nothingAccepted('--why --baseline');
++  });
++
++  it('an empty or blank reason is refused', () => {
++    // '' already fell to the missing-reason refusal, so this is not the fix's
++    // novelty — but whitespace did not, and both must land in the same place
++    // rather than one of them silently reading as a reason.
++    const empty = run('--accept', '--why', '');
++    expect(empty.status, 'an empty reason must not accept').toBe(2);
++    expect(empty.stderr).toContain('empty reason');
++
++    const blank = run('--accept', '--why', '   ');
++    expect(blank.status, 'whitespace is not a reason either').toBe(2);
++    nothingAccepted('an empty reason');
++  });
++
++  it('--why given twice is refused rather than resolved to one of them', () => {
++    // Two reasons, one record: picking either is a guess about which the caller
++    // meant, and the record would then assert something nobody wrote.
++    const r = run('--accept', '--why', 'first reason', '--why', 'second reason');
++    expect(r.status, 'an ambiguous reason must not accept').toBe(2);
++    expect(r.stderr).toContain('ambiguous');
++    nothingAccepted('--why twice');
++  });
++
++  it('a reason may begin with a dash without being a flag', () => {
++    // The guard names this script's flags rather than rejecting anything that
++    // starts with `--`, because a reason is free text and a sentence may open
++    // with a dash. A path may not: that asymmetry is deliberate.
++    const r = run('--accept', '--why', '--accept was agreed in review, see EMLP-RELAY-0114');
++    expect(r.status, 'a dashed sentence is still a reason').toBe(0);
++  });
++
++  it('a real reason still accepts, and the record carries it — the positive control', () => {
++    // Without this the whole file is satisfied by a monitor that refuses every
++    // acceptance. Declared last because it MOVES the drill baseline.
++    doctor();
++    const r = run('--accept', '--why', 'reviewed at EMLP-RELAY-0114 and safe');
++    expect(r.status, 'a real reason must accept').toBe(0);
++    expect(readFileSync(drillBaseline, 'utf8'), 'accepting DOES move the baseline').not.toBe(doctoredText);
++
++    const accepts = drillEvents().filter((e) => e.type === 'monitor:accept');
++    const last = accepts[accepts.length - 1];
++    expect(last?.alertsAccepted, 'and it accepted the open alert').toBe(1);
++    expect(last?.why, 'and the record carries what a person actually wrote').toBe(
++      'reviewed at EMLP-RELAY-0114 and safe',
++    );
++
++    expect(readFileSync(ledger, 'utf8'), 'the committed ledger moved').toBe(committedLedgerAtLoad);
++    expect(readFileSync(baselineFile, 'utf8'), 'the committed baseline moved').toBe(committedBaselineAtLoad);
++  });
++});
+diff --git a/tests/semantic-monitor.test.ts b/tests/semantic-monitor.test.ts
+index 5ef12e3..fe2094d 100644
+--- a/tests/semantic-monitor.test.ts
++++ b/tests/semantic-monitor.test.ts
+@@ -41,6 +41,18 @@ const ledger = join(here, '..', 'scripts', 'semantic-monitor.jsonl');
+ /** Disposable. Every spawn in this file writes here instead of the ledger. */
+ const drillLedger = join(here, '..', 'scripts', '.monitor-test-ledger.jsonl');
+ 
++/** The committed baseline, and a disposable one for the accept drill.
++ *
++ *  The drill has to run `--accept` against a baseline it has doctored. It used
++ *  to doctor THIS file and restore it in a `finally`, which is a live-state
++ *  mutation that holds only while the process survives. Measured on 2026-09-09
++ *  by killing the suite mid-drill: the file left on disk carried a fabricated
++ *  hash for packages/interp/src/values.ts and `git status` showed it modified.
++ *  The drill now writes a file of its own and the committed one is never
++ *  opened for writing, so there is nothing for an interruption to leave. */
++const baselineFile = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
++const drillBaseline = join(here, '..', 'scripts', '.monitor-test-baseline.json');
++
+ /**
+  * Read once, at module load, before any test in this file has run. The last
+  * test compares against it. Without this the isolation is a convention: a
+@@ -49,6 +61,7 @@ const drillLedger = join(here, '..', 'scripts', '.monitor-test-ledger.jsonl');
+  * test here would still be green.
+  */
+ const committedLedgerAtLoad = readFileSync(ledger, 'utf8');
++const committedBaselineAtLoad = readFileSync(baselineFile, 'utf8');
+ 
+ /** Spawn the monitor with the ledger redirected. There is no overload that
+  *  forgets the flag: a test that wants to run the monitor calls this. */
+@@ -56,6 +69,21 @@ function runMonitor(...args: string[]) {
+   return spawnSync(process.execPath, [monitor, '--ledger', drillLedger, ...args], { encoding: 'utf8' });
+ }
+ 
++/** Spawn with BOTH records redirected. Used by anything that writes a baseline.
++ *
++ *  runMonitor is deliberately still available and still reads the committed
++ *  baseline: the drift check is only meaningful against the real one, and it
++ *  never writes. What must not happen is a WRITE to the committed baseline,
++ *  and that is what the gate at the bottom of this file measures — on the file,
++ *  not on the arguments, so it catches such a write however it arrives. */
++function runDrill(...args: string[]) {
++  return spawnSync(
++    process.execPath,
++    [monitor, '--ledger', drillLedger, '--baseline', drillBaseline, ...args],
++    { encoding: 'utf8' },
++  );
++}
++
+ function drillEvents(): Array<Record<string, unknown>> {
+   if (!existsSync(drillLedger)) return [];
+   return readFileSync(drillLedger, 'utf8')
+@@ -65,8 +93,23 @@ function drillEvents(): Array<Record<string, unknown>> {
+     .map((l) => JSON.parse(l) as Record<string, unknown>);
+ }
+ 
++/** Remove a disposable file, and refuse to remove a committed one.
++ *
++ *  Found by the mutation battery rather than by review: pointing `drillBaseline`
++ *  at the committed path makes the guard-the-guard assertion fail, but `afterAll`
++ *  still runs — and an unguarded rmSync then DELETED the committed baseline
++ *  outright. A red gate beside a destroyed artifact is not a caught mutation.
++ *  The same shape applies to the ledger, which had it too. */
++function discard(path: string) {
++  if (path === ledger || path === baselineFile) {
++    throw new Error(`refusing to delete a committed artifact: ${path}`);
++  }
++  if (existsSync(path)) rmSync(path);
++}
++
+ afterAll(() => {
+-  if (existsSync(drillLedger)) rmSync(drillLedger);
++  discard(drillLedger);
++  discard(drillBaseline);
+ });
+ 
+ describe('semantic drift monitor', () => {
+@@ -134,56 +177,77 @@ describe('accepting an open alert requires a stated reason', () => {
+    * for when one should be looking harder, a silent accept was the weakest
+    * point in the design.
+    *
+-   * The committed baseline is doctored here and restored in `finally`. That is
+-   * a live-state mutation with a guard rather than a copy, and it is stated as
+-   * such: an earlier comment on this block claimed the drill ran against a
+-   * copy, while `tmp` was written and never read. The claim is removed rather
+-   * than the behaviour changed, because changing it is a separate finding.
++   * The drill runs against a baseline of its own. It used to doctor the
++   * COMMITTED baseline and restore it in a `finally` — a live-state mutation
++   * guarded by the process surviving long enough to undo it. That guard was
++   * measured on 2026-09-09 rather than argued about: the suite was killed
++   * mid-drill and the committed baseline left on disk carried a fabricated hash
++   * (0000000000000000 against packages/interp/src/values.ts), with `git status`
++   * reporting it modified. There is now nothing to restore, so there is nothing
++   * an interruption can leave behind.
+    */
+   it('refuses --accept without --why when alerts are open, and does not write', () => {
+-    const tmp = join(here, '..', 'scripts', '.monitor-drill-baseline.json');
+-    const real = join(here, '..', 'scripts', 'semantic-monitor.baseline.json');
+-    const original = readFileSync(real, 'utf8');
++    // Start from a baseline that matches the working tree EXACTLY, then doctor
++    // one entry. Seeding rather than copying the committed file is what keeps
++    // this drill independent of the rest of the tree: on a day when the
++    // conformance tests had genuinely been edited, a doctored copy of the real
++    // baseline made the monitor see "source changed AND its test changed",
++    // report a note rather than an alert, and accept — so the drill failed for
++    // a reason that had nothing to do with the refusal it exists to check.
++    const seeded = runDrill('--accept', '--why', 'drill setup');
++    expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
++    expect(existsSync(drillBaseline), 'the seed must land in the drill baseline').toBe(true);
++
++    // A baseline claiming a different hash for a real semantics file now
++    // produces exactly the "changed without its test" alert, and it is the
++    // ONLY thing that differs — no source file is touched.
++    const doctored = JSON.parse(readFileSync(drillBaseline, 'utf8'));
++    doctored.hashes['packages/interp/src/values.ts'] = '0000000000000000';
++    const doctoredText = JSON.stringify(doctored, null, 2) + '\n';
++    writeFileSync(drillBaseline, doctoredText, 'utf8');
++
++    const refused = runDrill('--accept');
++    expect(refused.status, 'must refuse').toBe(1);
++    expect(refused.stdout).toContain('without a reason');
++    expect(readFileSync(drillBaseline, 'utf8'), 'a refusal must not move the baseline').toBe(doctoredText);
++
++    const accepted = runDrill('--accept', '--why', 'drill');
++    expect(accepted.status, 'must accept once a reason is given').toBe(0);
++    expect(readFileSync(drillBaseline, 'utf8'), 'accepting DOES move the baseline').not.toBe(doctoredText);
++
++    // The redirect must not have cost the drill its evidence. Both outcomes
++    // this block exists to distinguish have to be in the record, or the
++    // isolation has turned a real drill into a pair of exit codes.
++    const types = drillEvents().map((e) => e.type);
++    expect(types, 'the refusal must be recorded').toContain('monitor:accept-refused');
++    expect(types, 'the acceptance must be recorded').toContain('monitor:accept');
++  });
++
++  it('the two redirects are independent of each other', () => {
++    // Neither flag may imply the other. If --ledger quietly moved the baseline
++    // too, or --baseline the ledger, the drill would appear isolated while one
++    // committed artifact was still being written.
++    const onlyLedger = join(here, '..', 'scripts', '.monitor-test-only-ledger.jsonl');
++    const onlyBaseline = join(here, '..', 'scripts', '.monitor-test-only-baseline.json');
+     try {
+-      // Start from a baseline that matches the working tree EXACTLY, then
+-      // doctor one entry. Doctoring the COMMITTED baseline instead made this
+-      // drill depend on the rest of the tree being clean: on a day when the
+-      // conformance tests had genuinely been edited, the monitor saw "source
+-      // changed AND its test changed", reported a note rather than an alert,
+-      // and `--accept` succeeded — so the drill failed for a reason that had
+-      // nothing to do with the refusal it exists to check.
+-      const seeded = runMonitor('--accept', '--why', 'drill setup');
+-      expect(seeded.status, 'seeding a matching baseline must succeed').toBe(0);
+-
+-      // A baseline claiming a different hash for a real semantics file now
+-      // produces exactly the "changed without its test" alert, and it is the
+-      // ONLY thing that differs — no source file is touched.
+-      const doctored = JSON.parse(readFileSync(real, 'utf8'));
+-      doctored.hashes['packages/interp/src/values.ts'] = '0000000000000000';
+-      writeFileSync(tmp, JSON.stringify(doctored, null, 2) + '\n', 'utf8');
+-      writeFileSync(real, JSON.stringify(doctored, null, 2) + '\n', 'utf8');
+-      const refused = runMonitor('--accept');
+-      expect(refused.status, 'must refuse').toBe(1);
+-      expect(refused.stdout).toContain('without a reason');
+-      expect(readFileSync(real, 'utf8'), 'a refusal must not move the baseline').toBe(
+-        JSON.stringify(doctored, null, 2) + '\n',
+-      );
++      // --ledger alone: writes that ledger, reads the committed baseline, and
++      // creates no baseline of its own.
++      const l = spawnSync(process.execPath, [monitor, '--ledger', onlyLedger], { encoding: 'utf8' });
++      expect(l.status, '--ledger alone must still run against the committed baseline').toBe(0);
++      expect(existsSync(onlyLedger), '--ledger alone must write its ledger').toBe(true);
++      expect(existsSync(onlyBaseline), '--ledger must not invent a baseline').toBe(false);
+ 
+-      const accepted = runMonitor('--accept', '--why', 'drill');
+-      expect(accepted.status, 'must accept once a reason is given').toBe(0);
+-      expect(readFileSync(real, 'utf8'), 'accepting DOES move the baseline').not.toBe(
+-        JSON.stringify(doctored, null, 2) + '\n',
++      // --baseline alone, with --accept, writes that baseline and nothing else.
++      const b = spawnSync(
++        process.execPath,
++        [monitor, '--ledger', drillLedger, '--baseline', onlyBaseline, '--accept', '--why', 'independence drill'],
++        { encoding: 'utf8' },
+       );
+-
+-      // The redirect must not have cost the drill its evidence. Both outcomes
+-      // this block exists to distinguish have to be in the record, or the
+-      // isolation has turned a real drill into a pair of exit codes.
+-      const types = drillEvents().map((e) => e.type);
+-      expect(types, 'the refusal must be recorded').toContain('monitor:accept-refused');
+-      expect(types, 'the acceptance must be recorded').toContain('monitor:accept');
++      expect(b.status, '--baseline alone must accept into that file').toBe(0);
++      expect(existsSync(onlyBaseline), '--baseline must write where it was pointed').toBe(true);
+     } finally {
+-      writeFileSync(real, original, 'utf8'); // always restore the committed baseline
+-      if (existsSync(tmp)) rmSync(tmp);
++      if (existsSync(onlyLedger)) rmSync(onlyLedger);
++      if (existsSync(onlyBaseline)) rmSync(onlyBaseline);
+     }
+   });
+ });
+@@ -207,4 +271,23 @@ describe('the drill does not write the record of what happened', () => {
+     // every assertion above and none of the point.
+     expect(drillLedger).not.toBe(ledger);
+   });
++
++  it('the committed baseline is byte-for-byte what it was at module load', () => {
++    // The same gate, for the other committed artifact. It is deliberately a
++    // check on the FILE rather than on the arguments of each spawn: a write
++    // that arrives some other way — a direct spawnSync, a writeFileSync in a
++    // future drill, a flag dropped from runDrill — is caught just the same.
++    // Before 2026-09-09 this assertion did not exist and the accept drill wrote
++    // this file four times per suite run, restoring it in a `finally`.
++    expect(
++      readFileSync(baselineFile, 'utf8'),
++      'something in this file wrote the committed baseline; use runDrill, which passes --baseline',
++    ).toBe(committedBaselineAtLoad);
++  });
++
++  it('the drill baseline is a different file from the committed one', () => {
++    // Guards that guard. Pointing --baseline at the committed path would
++    // satisfy every assertion above and none of the point.
++    expect(drillBaseline).not.toBe(baselineFile);
++  });
+ });
