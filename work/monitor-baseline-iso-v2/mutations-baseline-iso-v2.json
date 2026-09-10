@@ -1,0 +1,137 @@
+[
+  {
+    "id": "M1",
+    "file": "semantic-monitor.test.ts",
+    "label": "runDrill stops redirecting the baseline",
+    "failed": 2,
+    "passed": 15,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M2",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill baseline IS the committed baseline",
+    "failed": 2,
+    "passed": 15,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M3",
+    "file": "semantic-monitor.mjs",
+    "label": "--baseline is validated and then ignored",
+    "failed": 3,
+    "passed": 14,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M4",
+    "file": "semantic-monitor.mjs",
+    "label": "--ledger silently implies --baseline, so the flags stop being independent",
+    "failed": 2,
+    "passed": 15,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "M5",
+    "file": "semantic-monitor.test.ts",
+    "label": "the drill goes back to doctoring the committed baseline directly",
+    "failed": 2,
+    "passed": 15,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "M6",
+    "file": "semantic-monitor.mjs",
+    "label": "--accept writes the committed baseline whatever --baseline said",
+    "failed": 3,
+    "passed": 14,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json"
+  },
+  {
+    "id": "P1",
+    "file": "semantic-monitor.mjs",
+    "label": "a flag with no path falls back to the committed artifact again",
+    "failed": 8,
+    "passed": 9,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.baseline.json ;  M scripts/semantic-monitor.jsonl"
+  },
+  {
+    "id": "P2",
+    "file": "semantic-monitor.mjs",
+    "label": "the next-flag guard is dropped, so --baseline eats --ledger",
+    "failed": 1,
+    "passed": 16,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "P3",
+    "file": "semantic-monitor.mjs",
+    "label": "an empty path falls back to the committed artifact again",
+    "failed": 4,
+    "passed": 13,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.jsonl"
+  },
+  {
+    "id": "P4",
+    "file": "semantic-monitor.mjs",
+    "label": "a flag given twice resolves to the first instead of refusing",
+    "failed": 1,
+    "passed": 16,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "P5",
+    "file": "semantic-monitor.mjs",
+    "label": "a refusal exits 0, so a caller reading the status sees nothing wrong",
+    "failed": 5,
+    "passed": 12,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "P6",
+    "file": "semantic-monitor.mjs",
+    "label": "a refusal exits 1, indistinguishable from real drift",
+    "failed": 5,
+    "passed": 12,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "P7",
+    "file": "semantic-monitor.mjs",
+    "label": "a refusal records itself, into the committed ledger it just refused",
+    "failed": 9,
+    "passed": 8,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.jsonl"
+  },
+  {
+    "id": "P8",
+    "file": "semantic-monitor.mjs",
+    "label": "the parser refuses well-formed paths too - the over-strict direction",
+    "failed": 7,
+    "passed": 10,
+    "status": "CAUGHT",
+    "artifact_damage": ""
+  },
+  {
+    "id": "P9",
+    "file": "semantic-monitor-flags.test.ts",
+    "label": "the flags file's disposable ledger IS the committed ledger",
+    "failed": 2,
+    "passed": 15,
+    "status": "CAUGHT",
+    "artifact_damage": "M scripts/semantic-monitor.jsonl"
+  }
+]
