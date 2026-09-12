@@ -1,0 +1,2 @@
+semantic-monitor: 771 corpus programs, 27 constructs tracked
+  no drift against the recorded baseline

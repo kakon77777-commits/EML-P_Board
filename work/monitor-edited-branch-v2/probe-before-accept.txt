@@ -1,0 +1,9 @@
+semantic-monitor: 771 corpus programs, 27 constructs tracked
+  note:  packages/interp/src/index.ts changed, and so did its conformance test — reviewed
+  ALERT: STALE BASELINE    packages/interp/src/index.ts changed, and what excuses it is tests/builtin-shapes.test.ts
+                  differing from the baseline — a fact about the baseline being
+                  unaccepted, not about this change. Until the baseline is accepted,
+                  EVERY future change to this file is excused by that same difference —
+                  the drift check for it cannot fail. Run: pnpm monitor:accept -- --why "..."
+
+1 alert(s). Nothing here is automatically wrong — it is a prompt to look.
